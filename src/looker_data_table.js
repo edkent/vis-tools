@@ -955,7 +955,6 @@ class LookerDataTable {
     var span_values = []
     var span_tracker = []
     
-    console.log('setColSpans() useHeadings', this.useHeadings)
     // init header_levels and span_values arrays
     for (var c = columns.length-1; c >= 0; c--) {
       var idx = columns.length - 1 - c
