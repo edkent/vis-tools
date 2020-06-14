@@ -868,9 +868,11 @@ class LookerDataTable {
               if (calc === 'absolute') {
                 column.idx = baseline.idx + 1
                 column.label = 'Var #'
+                column.unit = baseline.unit
               } else {
                 column.idx = baseline.idx + 2
                 column.label = 'Var %'
+                column.unit = '%'
               }
               try {
                 if (typeof config.columnOrder[column.id] !== 'undefined') {
@@ -888,6 +890,7 @@ class LookerDataTable {
               column.field = {
                 name: id
               }
+              column.heading = baseline.heading
               column.type = 'measure'
               column.pivoted = baseline.pivoted
               column.super_ = baseline.super
