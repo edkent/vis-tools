@@ -810,7 +810,7 @@ class LookerDataTable {
    * @param {*} baseline 
    * @param {*} comparison 
    */
-  calculateVariance (id, calc, baseline, comparison) {
+  calculateVariance (value_format, id, calc, baseline, comparison) {
     for  (var r = 0; r < this.data.length; r++) {
       var row = this.data[r]
       var baseline_value = row.data[baseline.id].value
@@ -818,14 +818,14 @@ class LookerDataTable {
       if (calc === 'absolute') {
         var cell_value = {
           value: baseline_value - comparison_value,
-          rendered: column.value_format === '' ? (baseline_value - comparison_value).toString() : SSF.format(column.value_format, (baseline_value - comparison_value)),
+          rendered: value_format === '' ? (baseline_value - comparison_value).toString() : SSF.format(value_format, (baseline_value - comparison_value)),
           cell_style: []
         }
       } else {
         var value = (baseline_value - comparison_value) / Math.abs(comparison_value)
         var cell_value = {
           value: value,
-          rendered: column.value_format === '' ? (100 * value) + '%' : SSF.format(column.value_format, value),
+          rendered: SSF.format('#0.00%', 100 * value),
           cell_style: []
         }
       }
@@ -889,9 +889,9 @@ class LookerDataTable {
 
               this.columns.push(column)
               if (variance.reverse) {
-                this.calculateVariance(id, calc, comparison, baseline)
+                this.calculateVariance(baseline.value_format, id, calc, comparison, baseline)
               } else {
-                this.calculateVariance(id, calc, baseline, comparison)
+                this.calculateVariance(baseline.value_format, id, calc, baseline, comparison)
               }
             } else {
               // pivoted measures
