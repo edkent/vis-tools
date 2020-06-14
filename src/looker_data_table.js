@@ -52,6 +52,7 @@ class Column {
     this.super = false
     this.pivot_key = '' // queryResponse.pivots[n].key // single string that concats all pivot values
     this.align = '' // left | center | right
+    this.value_format = ''
     this.hide = false
 
     this.sort_by_measure_values = [] // [index -1|dimension 0|measure 1|row totals & supermeasures 2, column number, [measure values]  ]
@@ -229,6 +230,7 @@ class LookerDataTable {
       column.view = column.field.view_label
       column.type = 'dimension'
       column.align = 'left'
+      column.value_format = column.field.value_format
       column.pivoted = false
       column.super = false
       column.sort_by_measure_values = [0, col_idx, ...newArray(this.pivot_fields.length, 0)]
@@ -289,6 +291,7 @@ class LookerDataTable {
             column.view = column.field.view_label
             column.type = 'measure'
             column.align = 'right'
+            column.value_format = column.field.value_format
             column.pivoted = true
             column.super = false
             column.pivot_key = pivotKey
@@ -333,6 +336,7 @@ class LookerDataTable {
         column.view = column.field.view_label
         column.type = 'measure'
         column.align = 'right'
+        column.value_format = column.field.value_format
         column.pivoted = false
         column.super = false
         column.sort_by_measure_values = [1, column.pos]
@@ -367,6 +371,7 @@ class LookerDataTable {
         column.label = column.field.label_short || column.field.label
         column.view = column.field.view_label
         column.type = 'measure'
+        column.value_format = column.field.value_format
         column.pivoted = false
         column.super = true
         column.sort_by_measure_values = [2, col_idx, ...newArray(this.pivot_fields.length, 1)]
@@ -635,7 +640,8 @@ class LookerDataTable {
           }
           var cellValue = {
             value: subtotal_value,
-            rendered: subtotal_value.toString(), // formatter(subtotal_value), 
+            rendered: column.value_format === '' ? subtotal_value.toString() : SSF.format(column.value_format, subtotal_value),
+            // subtotal_value.toString(), // formatter(subtotal_value), 
             cell_style: ['total']
           }
           subtotal.data[cellKey] = cellValue
@@ -771,7 +777,8 @@ class LookerDataTable {
         }
         row.data[subtotal.id] = {
           value: subtotal_value,
-          rendered: subtotal_value.toString(), // formatter(subtotal_value),
+          rendered: column.value_format === '' ? subtotal_value.toString() : SSF.format(column.value_format, subtotal_value),
+          // rendered: subtotal_value.toString(), // formatter(subtotal_value),
           align: 'right'
         }
         if (row.type == 'total') { row.data[subtotal.id].cell_style = ['total'] }
@@ -796,14 +803,16 @@ class LookerDataTable {
       if (calc === 'absolute') {
         var cell_value = {
           value: baseline_value - comparison_value,
-          rendered: (baseline_value - comparison_value).toString(), // formatter(baseline_value - comparison_value),
+          rendered: column.value_format === '' ? (baseline_value - comparison_value).toString() : SSF.format(column.value_format, (baseline_value - comparison_value)),
+          // rendered: (baseline_value - comparison_value).toString(), // formatter(baseline_value - comparison_value),
           cell_style: []
         }
       } else {
         var value = (baseline_value - comparison_value) / Math.abs(comparison_value)
         var cell_value = {
           value: value,
-          rendered: (100 * value) + '%', // formatter(100 * value) + '%',
+          rendered: column.value_format === '' ? (100 * value) + '%' : SSF.format(column.value_format, value),
+          // rendered: (100 * value) + '%', // formatter(100 * value) + '%',
           cell_style: []
         }
       }
