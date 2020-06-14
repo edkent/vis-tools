@@ -267,7 +267,8 @@ class LookerDataTable {
         label: queryResponse.fields.measure_like[m].label_short || queryResponse.fields.measure_like[m].label,
         view: queryResponse.fields.measure_like[m].view_label || '',
         is_table_calculation: typeof queryResponse.fields.measure_like[m].is_table_calculation !== 'undefined',
-        can_pivot: true
+        can_pivot: true,
+        value_format: queryResponse.fields.measure_like[m].value_format || ''
       }) 
     }
     
@@ -701,6 +702,7 @@ class LookerDataTable {
             field: measure,
             label: this.measures[m].label,
             view: this.measures[m].view,
+            value_format: this.measures[m].value_format,
             pivot: pivot,
             measure_idx: m,
             pivot_idx: p,
@@ -758,6 +760,7 @@ class LookerDataTable {
       column.label = subtotal.label
       column.view = subtotal.view || ''
       column.field = { name: subtotal.field } // Looker field definition. Name only, to calc colspans
+      column.value_format = subtotal.value_format || ''
       column.type = 'measure' // dimension | measure
       column.sort_by_measure_values = [1, subtotal.measure_idx, ...column.levels]
 
