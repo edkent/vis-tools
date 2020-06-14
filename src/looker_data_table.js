@@ -41,6 +41,9 @@ class Column {
     this.id = id
     this.idx = 0
     this.pos = 0
+    this.heading = ''
+    this.short_name = ''
+    this.unit = ''
     this.label = '' // queryResponse.fields.measures[n].label_short
     this.view = '' // queryResponse.fields.measures[n].view_label
     this.levels = []
@@ -213,6 +216,14 @@ class LookerDataTable {
     })
   }
 
+  getVisToolsTags(field) {
+    if (typeof field.tags !== 'undefined') {
+      for (var t = 0; t < field.tags.length; t++) {
+        console.log('getVisToolsTags() tag', t, field.tags[t])
+      }
+    }
+  }
+
   addDimensions(config, queryResponse, col_idx) {
     for (var d = 0; d < queryResponse.fields.dimension_like.length; d++) {
       this.dimensions.push({
@@ -226,6 +237,7 @@ class LookerDataTable {
       column.levels = newArray(queryResponse.fields.pivots.length, '') // populate empty levels when pivoted
       column.field = queryResponse.fields.dimension_like[d]
       column.field_name = column.field.name
+      this.getVisToolsTags(column.field)
       column.label = column.field.label_short || column.field.label
       column.view = column.field.view_label
       column.type = 'dimension'
@@ -287,6 +299,7 @@ class LookerDataTable {
             column.idx = col_idx
             column.levels = levels
             column.field = queryResponse.fields.measure_like[m]
+            this.getVisToolsTags(column.field)
             column.label = column.field.label_short || column.field.label
             column.view = column.field.view_label
             column.type = 'measure'
@@ -332,6 +345,7 @@ class LookerDataTable {
           column.pos = col_idx
         }
         column.field = queryResponse.fields.measure_like[m]
+        this.getVisToolsTags(column.field)
         column.label = column.field.label_short || column.field.label
         column.view = column.field.view_label
         column.type = 'measure'
@@ -641,7 +655,6 @@ class LookerDataTable {
           var cellValue = {
             value: subtotal_value,
             rendered: column.value_format === '' ? subtotal_value.toString() : SSF.format(column.value_format, subtotal_value),
-            // subtotal_value.toString(), // formatter(subtotal_value), 
             cell_style: ['total']
           }
           subtotal.data[cellKey] = cellValue
@@ -778,10 +791,9 @@ class LookerDataTable {
         row.data[subtotal.id] = {
           value: subtotal_value,
           rendered: column.value_format === '' ? subtotal_value.toString() : SSF.format(column.value_format, subtotal_value),
-          // rendered: subtotal_value.toString(), // formatter(subtotal_value),
           align: 'right'
         }
-        if (row.type == 'total') { row.data[subtotal.id].cell_style = ['total'] }
+        if (['total', 'subtotal'].includes(row.type)) { row.data[subtotal.id].cell_style = ['total'] }
       }
     }
 
@@ -804,7 +816,6 @@ class LookerDataTable {
         var cell_value = {
           value: baseline_value - comparison_value,
           rendered: column.value_format === '' ? (baseline_value - comparison_value).toString() : SSF.format(column.value_format, (baseline_value - comparison_value)),
-          // rendered: (baseline_value - comparison_value).toString(), // formatter(baseline_value - comparison_value),
           cell_style: []
         }
       } else {
@@ -812,7 +823,6 @@ class LookerDataTable {
         var cell_value = {
           value: value,
           rendered: column.value_format === '' ? (100 * value) + '%' : SSF.format(column.value_format, value),
-          // rendered: (100 * value) + '%', // formatter(100 * value) + '%',
           cell_style: []
         }
       }
