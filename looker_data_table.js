@@ -1089,3 +1089,4 @@ class LookerDataTable {
   }
 }
 
+exports.LookerDataTable = LookerDataTable
