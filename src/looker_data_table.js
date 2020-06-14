@@ -131,6 +131,7 @@ class LookerDataTable {
     this.rowspan_values = {}
 
     this.useIndexColumn = config.indexColumn || false
+    this.useHeadings = config.useHeadings || false
     this.addRowSubtotals = config.rowSubtotals || false
     this.addSubtotalDepth = config.subtotalDepth || this.dimensions.length - 1
     this.spanRows = false || config.spanRows
@@ -937,7 +938,10 @@ class LookerDataTable {
   }
 
   getLevels () {
-    return newArray(this.pivot_fields.length+1, 0)
+    var num_levels =  this.pivot_fields.length + 1
+    if (this.useHeadings && !this.has_pivots) { num_levels++ }
+    
+    return newArray(num_levels, 0)
   }
 
   /**
@@ -951,7 +955,7 @@ class LookerDataTable {
     var span_values = []
     var span_tracker = []
     
-
+    console.log('setColSpans() useHeadings', this.useHeadings)
     // init header_levels and span_values arrays
     for (var c = columns.length-1; c >= 0; c--) {
       var idx = columns.length - 1 - c
@@ -960,6 +964,10 @@ class LookerDataTable {
         header_levels[idx] = [...columns[c].levels, columns[c].field.name] // columns[c].levels.concat([columns[c].field.name])
       } else {
         header_levels[idx] = [columns[c].field.name, ...columns[c].levels]
+      }
+
+      if (this.useHeadings && !this.has_pivots) {
+        header_levels[idx].unshift(columns[c].heading)
       }
 
       span_values[c] = newArray(header_levels[idx].length, 1)
