@@ -633,7 +633,7 @@ class LookerDataTable {
           }
           var cellValue = {
             value: subtotal_value,
-            rendered: subtotal_value.toString() // formatter(subtotal_value), 
+            rendered: subtotal_value.toString(), // formatter(subtotal_value), 
             cell_style: ['total']
           }
           subtotal.data[cellKey] = cellValue
@@ -769,7 +769,7 @@ class LookerDataTable {
         }
         row.data[subtotal.id] = {
           value: subtotal_value,
-          rendered: subtotal_value.toString() // formatter(subtotal_value),
+          rendered: subtotal_value.toString(), // formatter(subtotal_value),
           align: 'right'
         }
         if (row.type == 'total') { row.data[subtotal.id].cell_style = ['total'] }
@@ -794,14 +794,14 @@ class LookerDataTable {
       if (calc === 'absolute') {
         var cell_value = {
           value: baseline_value - comparison_value,
-          rendered: (baseline_value - comparison_value).toString() // formatter(baseline_value - comparison_value),
+          rendered: (baseline_value - comparison_value).toString(), // formatter(baseline_value - comparison_value),
           cell_style: []
         }
       } else {
         var value = (baseline_value - comparison_value) / Math.abs(comparison_value)
         var cell_value = {
           value: value,
-          rendered: (100 * value) + '%' // formatter(100 * value) + '%',
+          rendered: (100 * value) + '%', // formatter(100 * value) + '%',
           cell_style: []
         }
       }
