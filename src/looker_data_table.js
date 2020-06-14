@@ -216,10 +216,19 @@ class LookerDataTable {
     })
   }
 
-  getVisToolsTags(field) {
-    if (typeof field.tags !== 'undefined') {
-      for (var t = 0; t < field.tags.length; t++) {
-        console.log('getVisToolsTags() tag', t, field.tags[t])
+  applyVisToolsTags(column) {
+    if (typeof column.field.tags !== 'undefined') {
+      for (var t = 0; t < column.field.tags.length; t++) {
+        var tags = column.field.tags[t].split(':')
+        if (tags[0] === 'vis-tools') {
+          if (tags[1] === 'heading') {
+            column.heading = tags[2]
+          } else if (tags[1] === 'short_name') {
+            column.short_name = tags[2]
+          } else if (tags[1] === 'unit') {
+            column.unit = tags[2]
+          }
+        }
       }
     }
   }
@@ -237,7 +246,7 @@ class LookerDataTable {
       column.levels = newArray(queryResponse.fields.pivots.length, '') // populate empty levels when pivoted
       column.field = queryResponse.fields.dimension_like[d]
       column.field_name = column.field.name
-      this.getVisToolsTags(column.field)
+      this.applyVisToolsTags(column)
       column.label = column.field.label_short || column.field.label
       column.view = column.field.view_label
       column.type = 'dimension'
@@ -300,7 +309,7 @@ class LookerDataTable {
             column.idx = col_idx
             column.levels = levels
             column.field = queryResponse.fields.measure_like[m]
-            this.getVisToolsTags(column.field)
+            this.applyVisToolsTags(column)
             column.label = column.field.label_short || column.field.label
             column.view = column.field.view_label
             column.type = 'measure'
@@ -346,7 +355,7 @@ class LookerDataTable {
           column.pos = col_idx
         }
         column.field = queryResponse.fields.measure_like[m]
-        this.getVisToolsTags(column.field)
+        this.applyVisToolsTags(column)
         column.label = column.field.label_short || column.field.label
         column.view = column.field.view_label
         column.type = 'measure'
@@ -633,7 +642,7 @@ class LookerDataTable {
 
       for (var d = 0; d < this.columns.length; d++) {
         var column = this.columns[d]
-        subtotal.data[column.id] = '' // set default
+        subtotal.data[column.id] = {} // set default
 
         if (this.columns[d].id === '$$$_index_$$$' || d === this.dimensions.length ) {
           var subtotal_label = subTotals[s].join(' | ')
