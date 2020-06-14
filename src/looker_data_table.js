@@ -331,18 +331,18 @@ class LookerDataTable {
       for (var m = 0; m < this.measures.length; m++) {
         var column = new Column(this.measures[m].name)
         column.idx = col_idx
-        console.log('addMeasures() col.id', column.id)
+        // console.log('addMeasures() col.id', column.id)
         try {
           if (typeof config.columnOrder[column.id] !== 'undefined') {
             column.pos = config.columnOrder[column.id]
-            console.log('addMeasures() config found, pos', column.pos)
+            // console.log('addMeasures() config found, pos', column.pos)
           } else {
             column.pos = col_idx
-            console.log('addMeasures() config undefined, pos', column.pos)
+            // console.log('addMeasures() config undefined, pos', column.pos)
           }
         }
         catch {
-          console.log('addMeasures() catch config.columnOrder undefined')
+          // console.log('addMeasures() catch config.columnOrder undefined')
           column.pos = col_idx
         }
         column.field = queryResponse.fields.measure_like[m]
@@ -865,10 +865,10 @@ class LookerDataTable {
               try {
                 if (typeof config.columnOrder[column.id] !== 'undefined') {
                   column.pos = config.columnOrder[column.id]
-                  console.log('addVarianceColumns() config found, pos', column.pos)
+                  // console.log('addVarianceColumns() config found, pos', column.pos)
                 } else {
                   column.pos = column.idx
-                  console.log('addVarianceColumns() config undefined, pos', column.pos)
+                  // console.log('addVarianceColumns() config undefined, pos', column.pos)
                 }
               }
               catch {
