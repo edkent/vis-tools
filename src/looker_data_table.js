@@ -835,7 +835,7 @@ class LookerDataTable {
         var value = (baseline_value - comparison_value) / Math.abs(comparison_value)
         var cell_value = {
           value: value,
-          rendered: SSF.format('#0.00%', 100 * value),
+          rendered: SSF.format('#0.00%', value),
           cell_style: []
         }
       }
