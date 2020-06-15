@@ -867,28 +867,22 @@ class LookerDataTable {
 
               if (calc === 'absolute') {
                 column.idx = baseline.idx + 1
+                column.pos = baseline.pos + 1
                 column.label = 'Var #'
                 column.unit = baseline.unit
                 column.hide = !config['var_num|' + baseline.id]
               } else {
                 column.idx = baseline.idx + 2
+                column.pos = baseline.pos + 2
                 column.label = 'Var %'
                 column.unit = '%'
                 column.hide = !config['var_pct|' + baseline.id]
               }
-              try {
-                if (typeof config.columnOrder[column.id] !== 'undefined') {
-                  column.pos = config.columnOrder[column.id]
-                  // console.log('addVarianceColumns() config found, pos', column.pos)
-                } else {
-                  column.pos = column.idx
-                  // console.log('addVarianceColumns() config undefined, pos', column.pos)
-                }
-              }
-              catch {
-                console.log('addVarianceColumns() catch config.columnOrder undefined')
-                column.pos = column.idx
-              }
+
+              if (typeof config.columnOrder[column.id] !== 'undefined') {
+                column.pos = config.columnOrder[column.id]
+              } 
+
               column.field = {
                 name: id
               }
