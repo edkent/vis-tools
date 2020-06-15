@@ -869,10 +869,12 @@ class LookerDataTable {
                 column.idx = baseline.idx + 1
                 column.label = 'Var #'
                 column.unit = baseline.unit
+                column.hide = !config['var_num|' + baseline.id]
               } else {
                 column.idx = baseline.idx + 2
                 column.label = 'Var %'
                 column.unit = '%'
+                column.hide = !config['var_pct|' + baseline.id]
               }
               try {
                 if (typeof config.columnOrder[column.id] !== 'undefined') {
