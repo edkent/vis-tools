@@ -891,7 +891,7 @@ class LookerDataTable {
     column.type = 'measure'
     column.pivoted = baseline.pivoted
     column.super = baseline.super
-    column.levels = []
+    column.levels = baseline.levels
     column.pivot_key = ''
     column.align = 'right'
 
@@ -909,20 +909,23 @@ class LookerDataTable {
   addVarianceColumns (config) {
     var variance_colpairs = []
     var calcs = ['absolute', 'percent']
-    calcs.forEach(calc => {
-      Object.keys(this.variances).forEach(v => {
-        var variance = this.variances[v]
-        if (variance.comparison !== 'no_variance') {          
-          if (variance.type === 'vs_measure') {
-            if (!this.has_pivots) {
+    
+    Object.keys(this.variances).forEach(v => {
+      var variance = this.variances[v]
+      if (variance.comparison !== 'no_variance') {          
+        if (variance.type === 'vs_measure') {
+          if (!this.has_pivots) {
+            calcs.forEach(calc => {
               variance_colpairs.push({
                 variance: variance,
                 calc: calc
               })
-            } else {
-              // pivoted measures
-              this.pivot_values.forEach(pivot_value => {
-                if (!pivot_value.is_total) {
+            })
+          } else {
+            // pivoted measures
+            this.pivot_values.forEach(pivot_value => {
+              if (!pivot_value.is_total) {
+                calcs.forEach(calc => {
                   variance_colpairs.push({
                     variance: {
                       baseline: [pivot_value.key, variance.baseline].join('.'),
@@ -932,15 +935,16 @@ class LookerDataTable {
                     },
                     calc: calc
                   })
-                }
-              })
-            }
-          } else {
-            // by_pivot
+                })
+              }
+            })
           }
+        } else {
+          // by_pivot
         }
-      })
+      }
     })
+    
     variance_colpairs.forEach(colpair => {
       this.createVarianceColumn(colpair, config)
     })
