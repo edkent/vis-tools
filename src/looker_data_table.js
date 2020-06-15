@@ -849,10 +849,65 @@ class LookerDataTable {
     }
   }
 
+  createVarianceColumn (colpair, config) {
+    var id = ['$$$_variance_$$$', colpair.calc, colpair.variance.baseline, colpair.variance.comparison].join('|')
+    var column = new Column(id)
+    var baseline = this.getColumnById(colpair.variance.baseline)
+    var comparison = this.getColumnById(colpair.variance.comparison)
+
+    if (colpair.calc === 'absolute') {
+      column.idx = baseline.idx + 1
+      column.pos = baseline.pos + 1
+      column.sort_by_measure_values = baseline.sort_by_measure_values.concat(1)
+      column.sort_by_pivot_values = baseline.sort_by_pivot_values.concat(1)
+      column.label = 'Var #'
+      column.unit = baseline.unit
+      column.hide = !config['var_num|' + baseline.field_name]
+    } else {
+      column.idx = baseline.idx + 2
+      column.pos = baseline.pos + 2
+      column.sort_by_measure_values = baseline.sort_by_measure_values.concat(2)
+      column.sort_by_pivot_values = baseline.sort_by_pivot_values.concat(2)
+      column.label = 'Var %'
+      column.unit = '%'
+      column.hide = !config['var_pct|' + baseline.field_name]
+    }
+
+    if (baseline.sort_by_measure_values.length < column.sort_by_measure_values.length) {
+      baseline.sort_by_measure_values.push(0)
+    }
+    if (baseline.sort_by_pivot_values.length < column.sort_by_pivot_values.length) {
+      baseline.sort_by_pivot_values.push(0)
+    }
+
+    if (typeof config.columnOrder[column.id] !== 'undefined') {
+      column.pos = config.columnOrder[column.id]
+    } 
+
+    column.field = {
+      name: id
+    }
+    column.heading = baseline.heading
+    column.type = 'measure'
+    column.pivoted = baseline.pivoted
+    column.super = baseline.super
+    column.levels = []
+    column.pivot_key = ''
+    column.align = 'right'
+
+    this.columns.push(column)
+    if (colpair.variance.reverse) {
+      this.calculateVariance(baseline.value_format, id, colpair.calc, comparison, baseline)
+    } else {
+      this.calculateVariance(baseline.value_format, id, colpair.calc, baseline, comparison)
+    }
+  }
+
   /**
    * Function to add variance columns directly within table vis rather than requiring a table calc
    */
   addVarianceColumns (config) {
+    var variance_colpairs = []
     var calcs = ['absolute', 'percent']
     calcs.forEach(calc => {
       Object.keys(this.variances).forEach(v => {
@@ -860,56 +915,34 @@ class LookerDataTable {
         if (variance.comparison !== 'no_variance') {          
           if (variance.type === 'vs_measure') {
             if (!this.has_pivots) {
-              var id = ['$$$_variance_$$$', calc, variance.baseline, variance.comparison].join('|')
-              var column = new Column(id)
-              var baseline = this.getColumnById(variance.baseline)
-              var comparison = this.getColumnById(variance.comparison)
-
-              if (calc === 'absolute') {
-                column.idx = baseline.idx + 1
-                column.pos = baseline.pos + 1
-                column.label = 'Var #'
-                column.unit = baseline.unit
-                column.hide = !config['var_num|' + baseline.id]
-              } else {
-                column.idx = baseline.idx + 2
-                column.pos = baseline.pos + 2
-                column.label = 'Var %'
-                column.unit = '%'
-                column.hide = !config['var_pct|' + baseline.id]
-              }
-
-              if (typeof config.columnOrder[column.id] !== 'undefined') {
-                column.pos = config.columnOrder[column.id]
-              } 
-
-              column.field = {
-                name: id
-              }
-              column.heading = baseline.heading
-              column.type = 'measure'
-              column.pivoted = baseline.pivoted
-              column.super_ = baseline.super
-              column.levels = []
-              column.pivot_key = ''
-              column.align = 'right'
-              column.sort_by_measure_values = [1, column.pos]
-              column.sort_by_pivot_values = [1, column.pos]
-
-              this.columns.push(column)
-              if (variance.reverse) {
-                this.calculateVariance(baseline.value_format, id, calc, comparison, baseline)
-              } else {
-                this.calculateVariance(baseline.value_format, id, calc, baseline, comparison)
-              }
+              variance_colpairs.push({
+                variance: variance,
+                calc: calc
+              })
             } else {
               // pivoted measures
+              this.pivot_values.forEach(pivot_value => {
+                if (!pivot_value.is_total) {
+                  variance_colpairs.push({
+                    variance: {
+                      baseline: [pivot_value.key, variance.baseline].join('.'),
+                      comparison: [pivot_value.key, variance.comparison].join('.'),
+                      reverse: variance.reverse,
+                      type: variance.type
+                    },
+                    calc: calc
+                  })
+                }
+              })
             }
           } else {
             // by_pivot
           }
         }
       })
+    })
+    variance_colpairs.forEach(colpair => {
+      this.createVarianceColumn(colpair, config)
     })
   }
 
