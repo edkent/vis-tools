@@ -356,6 +356,7 @@ class LookerDataTable {
           column.pos = col_idx
         }
         column.field = queryResponse.fields.measure_like[m]
+        column.field_name = column.field.name
         this.applyVisToolsTags(column)
         column.label = column.field.label_short || column.field.label
         column.view = column.field.view_label
@@ -850,6 +851,7 @@ class LookerDataTable {
   }
 
   createVarianceColumn (colpair, config) {
+    console.log(config)
     var id = ['$$$_variance_$$$', colpair.calc, colpair.variance.baseline, colpair.variance.comparison].join('|')
     var column = new Column(id)
     var baseline = this.getColumnById(colpair.variance.baseline)
@@ -907,6 +909,7 @@ class LookerDataTable {
    * Function to add variance columns directly within table vis rather than requiring a table calc
    */
   addVarianceColumns (config) {
+    console.log('addVarianceColumns() config', config)
     var variance_colpairs = []
     var calcs = ['absolute', 'percent']
     
