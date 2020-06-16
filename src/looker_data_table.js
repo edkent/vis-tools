@@ -881,6 +881,11 @@ class LookerDataTable {
     if (baseline.sort_by_pivot_values.length < column.sort_by_pivot_values.length) {
       baseline.sort_by_pivot_values.push(0)
     }
+    // idea to test when vs_pivot variance is added
+    // if (config.sortColumnsBy === 'getSortByPivots') {
+    //   column.sort_by_pivot_values[0] = 1.5
+    //   column.label = baseline.field_name + ' ' + column.label
+    // }
 
     if (typeof config.columnOrder[column.id] !== 'undefined') {
       column.pos = config.columnOrder[column.id]
