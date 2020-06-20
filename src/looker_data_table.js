@@ -16,35 +16,44 @@ const newArray = function(length, value) {
 
 const lookerDataTableCoreOptions = {
   columnOrder: {},
+  rowSubtotals: {
+    section: "Table",
+    type: "boolean",
+    label: "Row Subtotals",
+    display_size: 'half',
+    default: "false",
+    order: 1,
+  },
+  colSubtotals: {
+    section: "Table",
+    type: "boolean",
+    label: "Col Subtotals",
+    display_size: 'half',
+    default: "false",
+    order: 2,
+  },
+  spanRows: {
+    section: "Table",
+    type: "boolean",
+    label: "Merge Dims",
+    display_size: 'half',
+    default: "true",
+    order: 3,
+  },
+  spanCols: {
+    section: "Table",
+    type: "boolean",
+    label: "Merge Headers",
+    display_size: 'half',
+    default: "true",
+    order: 4,
+  },
   subtotalDepth: {
     section: "Table",
     type: "number",
     label: "Sub Total Depth",
-    default: 1
-  },
-  indexColumn: {
-    section: "Table",
-    type: "boolean",
-    label: "Use Index Dimension",
-    default: "false",
-  },
-  useViewName: {
-    section: "Table",
-    type: "boolean",
-    label: "Include view name in label",
-    default: "false",
-  },
-  useHeadings: {
-    section: "Table",
-    type: "boolean",
-    label: "Use Headings (non-pivots only)",
-    default: "false",
-  },
-  useShortName: {
-    section: "Table",
-    type: "boolean",
-    label: "Use Short Name (from model)",
-    default: "false",
+    default: 1,
+    order: 5,
   },
   sortColumnsBy: {
     section: "Table",
@@ -56,34 +65,35 @@ const lookerDataTableCoreOptions = {
       { 'Measures': 'getSortByMeasures' }
     ],
     default: "getSortByPivots",
+    order: 6,
   },
-  spanRows: {
+  useViewName: {
     section: "Table",
     type: "boolean",
-    label: "Span Rows",
-    display_size: 'half',
-    default: "true",
-  },
-  spanCols: {
-    section: "Table",
-    type: "boolean",
-    label: "Span Cols",
-    display_size: 'half',
-    default: "true",
-  },
-  rowSubtotals: {
-    section: "Table",
-    type: "boolean",
-    label: "Row Subtotals",
-    display_size: 'half',
+    label: "Include View Name",
     default: "false",
+    order: 7,
   },
-  colSubtotals: {
+  useHeadings: {
     section: "Table",
     type: "boolean",
-    label: "Col Subtotals",
-    display_size: 'half',
+    label: "Use Headings (non-pivots only)",
     default: "false",
+    order: 8,
+  },
+  useShortName: {
+    section: "Table",
+    type: "boolean",
+    label: "Use Short Name (from model)",
+    default: "false",
+    order: 9,
+  },
+  indexColumn: {
+    section: "Dimensions",
+    type: "boolean",
+    label: "Use Last Field Only",
+    default: "false",
+    order: 0,
   },
 }
 
@@ -152,6 +162,10 @@ class Column {
 
     var label = this.parent.useShortName ? this.short_name || this.label : this.label
 
+    var key = 'label|' + this.field_name
+    if (typeof this.parent.config[key] !== 'undefined' && this.parent.config[key] !== this.label) {
+      label = this.parent.config[key] ? this.parent.config[key] : label
+    }
     if (this.parent.useViewName) { 
       label = [this.view, label].join(' ') 
     }
@@ -183,10 +197,7 @@ class Column {
           label = this.heading
         }
       } else {
-        var key = 'label|' + this.field_name
-        if (typeof this.parent.config[key] !== 'undefined' && this.parent.config[key] !== this.label) {
-          label = this.parent.config[key] ? this.parent.config[key] : label
-        }
+        // label already set
       }
     }
 
@@ -356,17 +367,22 @@ class LookerDataTable {
       }
 
       var comparisonOptions = []
-      // pivoted measures
-      if (this.measures[i].can_pivot) {
-        var pivotComparisons = []
-        for (var p = 0; p < this.pivot_fields.length; p++) {
-          var option = {}
-          option['By ' + this.pivot_fields[p]] = this.pivot_fields[p]
-          pivotComparisons.push(option)
-        }
-        comparisonOptions = comparisonOptions.concat(pivotComparisons)
-      }
-      // row totals and supermeasures
+      
+      // TODO: pivoted measures (i.e. PoP for the same measure)
+      //    Assuming it's easier in first version for modelled measures rather than users
+      //    knowing the pivot pattern
+      //
+      // if (this.measures[i].can_pivot) {
+      //   var pivotComparisons = []
+      //   for (var p = 0; p < this.pivot_fields.length; p++) {
+      //     var option = {}
+      //     option['By ' + this.pivot_fields[p]] = this.pivot_fields[p]
+      //     pivotComparisons.push(option)
+      //   }
+      //   comparisonOptions = comparisonOptions.concat(pivotComparisons)
+      // }
+
+      // measures, row totals and supermeasures
       for (var j = 0; j < this.measures.length; j++) {
         var includeMeasure = this.measures[i].can_pivot === this.measures[j].can_pivot
                               || 
@@ -527,6 +543,12 @@ class LookerDataTable {
         can_pivot: true,
         value_format: queryResponse.fields.measure_like[m].value_format || ''
       }
+      console.log('addMeasures newMeasure.name', newMeasure.name)
+      if (typeof config['style|' + newMeasure.name] !== 'undefined') {
+        if (config['style|' + newMeasure.name] === 'hide') {
+          newMeasure.hide = true
+        }
+      }
       this.applyVisToolsTags(queryResponse.fields.measure_like[m], newMeasure)
       this.measures.push(newMeasure) 
     }
@@ -580,7 +602,7 @@ class LookerDataTable {
               column.sort_by_pivot_values = [2, ...newArray(this.pivot_fields.length, 0), col_idx]
             }
 
-            // TODO: Hide function
+            column.hide = this.measures[m].hide
 
             this.columns.push(column)
             col_idx += 10
@@ -655,6 +677,7 @@ class LookerDataTable {
         column.unit = newSuperMeasure.unit
         column.view = column.field.view_label
         column.type = 'measure'
+        column.align = 'right'
         column.value_format = column.field.value_format
         column.pivoted = false
         column.super = true
@@ -981,6 +1004,7 @@ class LookerDataTable {
             short_name: this.measures[m].short_name,
             unit: this.measures[m].unit,
             view: this.measures[m].view,
+            hide: this.measures[m].hide || false,
             value_format: this.measures[m].value_format,
             pivot: pivot,
             measure_idx: m,
@@ -1041,6 +1065,7 @@ class LookerDataTable {
       column.short_name = subtotal.short_name
       column.unit = subtotal.unit
       column.view = subtotal.view || ''
+      column.hide = subtotal.hide
       column.field = { name: subtotal.field } // Looker field definition
       column.value_format = subtotal.value_format || ''
       column.type = 'measure' // dimension | measure
@@ -1368,7 +1393,6 @@ class LookerDataTable {
     // update list with colspans
     columns = this.setColSpans(config, columns).filter(c => c.colspans[i] > 0)
 
-    // console.log('getColumnsToDisplay i ->', i, headers)
     return columns
   }
 
@@ -1422,8 +1446,6 @@ class LookerDataTable {
       callback(col_order)
     }
   }
-
-  // TODO: getColumnOrder() {}
 
   /**
    * Returns dataset as a simple json object
