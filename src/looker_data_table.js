@@ -14,6 +14,79 @@ const newArray = function(length, value) {
   return arr
 }
 
+const lookerDataTableOptions = {
+  columnOrder: {},
+  subtotalDepth: {
+    section: "Table",
+    type: "number",
+    label: "Sub Total Depth",
+    default: 1
+  },
+  indexColumn: {
+    section: "Table",
+    type: "boolean",
+    label: "Use Index Dimension",
+    default: "false",
+  },
+  useViewName: {
+    section: "Table",
+    type: "boolean",
+    label: "Include view name in label",
+    default: "false",
+  },
+  useHeadings: {
+    section: "Table",
+    type: "boolean",
+    label: "Use Headings (non-pivots only)",
+    default: "false",
+  },
+  useShortName: {
+    section: "Table",
+    type: "boolean",
+    label: "Use Short Name (from model)",
+    default: "false",
+  },
+  sortColumnsBy: {
+    section: "Table",
+    type: "string",
+    display: "select",
+    label: "Sort Columns By",
+    values: [
+      { 'Pivots': 'getSortByPivots' },
+      { 'Measures': 'getSortByMeasures' }
+    ],
+    default: "getSortByPivots",
+  },
+  spanRows: {
+    section: "Table",
+    type: "boolean",
+    label: "Span Rows",
+    display_size: 'half',
+    default: "true",
+  },
+  spanCols: {
+    section: "Table",
+    type: "boolean",
+    label: "Span Cols",
+    display_size: 'half',
+    default: "true",
+  },
+  rowSubtotals: {
+    section: "Table",
+    type: "boolean",
+    label: "Row Subtotals",
+    display_size: 'half',
+    default: "false",
+  },
+  colSubtotals: {
+    section: "Table",
+    type: "boolean",
+    label: "Col Subtotals",
+    display_size: 'half',
+    default: "false",
+  },
+}
+
 /**
  * Represents a row in the dataset that populates the table.
  * This may be an addtional row (e.g. subtotal) not in the original query
@@ -214,6 +287,10 @@ class LookerDataTable {
     // addSpacerColumns
     // addUnitHeaders
     // addRowNumbers // to Index Column only?
+  }
+
+  static getOptions() {
+    return lookerDataTableOptions
   }
 
   checkPivotsAndSupermeasures(queryResponse) {
