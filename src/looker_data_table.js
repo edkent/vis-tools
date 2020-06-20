@@ -1106,16 +1106,9 @@ class LookerDataTable {
       for (var s = 0; s < subtotals.length; s++) {
         var subtotal = subtotals[s]
         var subtotal_value = 0
-        var item_count = 0
         for (var f = 0; f < subtotal.columns.length; f++) {
           var field = subtotal.columns[f]
           subtotal_value += row.data[field].value
-          if (row.data[field].value || row.data[field].value === 0) {
-            item_count++
-          }
-        }
-        if (subtotal.calculation_type === 'average' && item_count > 0) {
-          subtotal_value = subtotal_value / item_count
         }
         row.data[subtotal.id] = {
           value: subtotal_value,
