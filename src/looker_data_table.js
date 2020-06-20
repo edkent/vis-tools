@@ -801,6 +801,10 @@ class LookerDataTable {
    */
   updateRowSpanValues () {
     var span_tracker = {}
+    for (d = 0; d < this.dimensions.length; d++) {
+      span_tracker[this.dimensions[d].name] = 1
+    }
+
     // loop backwards through data rows
     for (var r = this.data.length-1; r >= 0 ; r--) {
       var row = this.data[r]
