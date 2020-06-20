@@ -541,9 +541,9 @@ class LookerDataTable {
         view: queryResponse.fields.measure_like[m].view_label || '',
         is_table_calculation: typeof queryResponse.fields.measure_like[m].is_table_calculation !== 'undefined',
         can_pivot: true,
+        calculation_type: queryResponse.fields.measure_like[m].type,
         value_format: queryResponse.fields.measure_like[m].value_format || ''
       }
-      console.log('addMeasures newMeasure.name', newMeasure.name)
       if (typeof config['style|' + newMeasure.name] !== 'undefined') {
         if (config['style|' + newMeasure.name] === 'hide') {
           newMeasure.hide = true
@@ -587,6 +587,7 @@ class LookerDataTable {
             column.label = column.field.label_short || column.field.label
             column.view = column.field.view_label
             column.type = 'measure'
+            column.calculation_type = this.measures[m].calculation_type
             column.align = 'right'
             column.value_format = column.field.value_format
             column.pivoted = true
@@ -636,6 +637,7 @@ class LookerDataTable {
         column.label = column.field.label_short || column.field.label
         column.view = column.field.view_label
         column.type = 'measure'
+        column.calculation_type = this.measures[m].calculation_type
         column.align = 'right'
         column.value_format = column.field.value_format
         column.pivoted = false
@@ -941,6 +943,7 @@ class LookerDataTable {
 
         if (column.type == 'measure') {
           var subtotal_value = 0
+          var subtotal_items = 0
           if (column.pivoted) {
             var cellKey = [column.pivot_key, column.field_name].join('.') 
           } else {
@@ -950,7 +953,14 @@ class LookerDataTable {
             var data_row = this.data[mr]
             if (data_row.type == 'line_item' && data_row.sort[1] == s) {
               subtotal_value += data_row.data[cellKey].value
+              if (data_row.data[cellKey].value || data_row.data[cellKey].value === 0) {
+                subtotal_items++
+              }
             } 
+          }
+
+          if (column.calculation_type === 'average' && subtotal_items > 0) {
+            subtotal_value = subtotal_value / subtotal_items
           }
           var cellValue = {
             value: subtotal_value,
@@ -1006,6 +1016,7 @@ class LookerDataTable {
             view: this.measures[m].view,
             hide: this.measures[m].hide || false,
             value_format: this.measures[m].value_format,
+            calculation_type: this.measures[m].calculation_type || 'sum',
             pivot: pivot,
             measure_idx: m,
             pivot_idx: p,
@@ -1013,6 +1024,7 @@ class LookerDataTable {
             id: ['$$$_subtotal_$$$', pivot, measure].join('.'),
             after: ''
           }
+          console.log('new subtotal_col label, calc type', subtotal_col.label, subtotal_col.calculation_type)
           // console.log('...subtotal_col init', subtotal_col)
   
           for (var c = 0; c < this.columns.length; c++) {
@@ -1069,6 +1081,7 @@ class LookerDataTable {
       column.field = { name: subtotal.field } // Looker field definition
       column.value_format = subtotal.value_format || ''
       column.type = 'measure' // dimension | measure
+      column.calculation_type = subtotal.calculation_type
       column.sort_by_measure_values = [1, subtotal.measure_idx, ...column.levels]
 
       var pivot_values = [...column.levels]
@@ -1093,9 +1106,16 @@ class LookerDataTable {
       for (var s = 0; s < subtotals.length; s++) {
         var subtotal = subtotals[s]
         var subtotal_value = 0
+        var item_count = 0
         for (var f = 0; f < subtotal.columns.length; f++) {
           var field = subtotal.columns[f]
           subtotal_value += row.data[field].value
+          if (row.data[field].value || row.data[field].value === 0) {
+            item_count++
+          }
+        }
+        if (subtotal.calculation_type === 'average' && item_count > 0) {
+          subtotal_value = subtotal_value / item_count
         }
         row.data[subtotal.id] = {
           value: subtotal_value,
