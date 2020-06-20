@@ -68,15 +68,60 @@ class Column {
    * @param {*} label_with_view - full field name including label e.g. "Users Name"
    * @param {*} label_with_pivots - adds all pivot values "Total Users Q1 Male"
    */
-  getLabel (label_with_view=false, label_with_pivots=false) {
-    var label = this.label
-    if (label_with_view) { 
+  getLabel (params) {
+    var defaultParams = {
+      hasPivots: false,
+      withPivots: false,
+      level: 0,
+      config: {
+        sortColsBy: '',
+        useHeadings: false,
+        useShortName: false,
+        useViewName: false
+      },
+    }
+    params = Object.assign(defaultParams, params)
+
+    var label = params.config.useShortName ? this.short_name || this.label : this.label
+
+    if (params.config.useViewName) { 
       label = [this.view, label].join(' ') 
     }
-    if (label_with_pivots) {
-      var pivots = this.levels.join(' ')
-      label = [label, pivots].join(' ') 
+
+    if (params.hasPivots) {
+      if (params.withPivots) {
+        var pivots = this.levels.join(' ')
+        label = [label, pivots].join(' ') 
+      }
+      if (params.config.sortColumnsBy === 'getSortByPivots') {
+        if (params.level == 0) {
+          label = this.levels[i - 1]
+        }
+      } else { // params.config.sortColumnsBy === 'getSortByMeasures'
+        if (i < this.levels.length && this.pivoted) {
+          label = this.levels[i]
+        } else if (i === this.levels.length) {
+          // label already set
+        } else {
+          label = ''
+        }
+      } 
+    } else { // flat table
+      if (params.config.useHeadings && params.level === 0) {
+        var key = 'heading|' + this.field_name
+        if (typeof params.config[key] !== 'undefined') {
+          label = params.config[key] ? params.config[key] : this.heading
+        } else {
+          label = this.heading
+        }
+      } else {
+        var key = 'label|' + this.field_name
+        if (typeof params.config[key] !== 'undefined') {
+          label = params.config[key] ? params.config[key] : label
+        }
+      }
     }
+
     return label
   }
 
@@ -167,7 +212,6 @@ class LookerDataTable {
 
     // TODO: more formatting options
     // addSpacerColumns
-    // addGroupHeaders
     // addUnitHeaders
     // addRowNumbers // to Index Column only?
   }
@@ -992,7 +1036,7 @@ class LookerDataTable {
    * Performs horizontal cell merge of header values by calculating required colspan values
    * @param {*} columns 
    */
-  setColSpans (columns) {
+  setColSpans (config, columns) {
     // build single array of the header values
     // use column id for the label level
     var header_levels = []
@@ -1010,7 +1054,12 @@ class LookerDataTable {
       }
 
       if (this.useHeadings && !this.has_pivots) {
-        header_levels[idx].unshift(columns[c].heading)
+        var column_heading = columns[c].heading
+        var key = 'heading|' + columns[c].field_name
+        if (typeof config[key] !== 'undefined') {
+          column_heading = config[key] ? config[key] : column_heading
+        } 
+        header_levels[idx].unshift(column_heading)
       }
 
       span_values[c] = newArray(header_levels[idx].length, 1)
@@ -1084,7 +1133,7 @@ class LookerDataTable {
    * Builds list of columns out of data set that should be displayed
    * @param {*} i 
    */
-  getColumnsToDisplay (i) {
+  getColumnsToDisplay (config, i) {
     // remove some dimension columns if we're just using a single index column
     if (this.useIndexColumn) {
       var columns = this.columns.filter(c => c.type == 'measure' || c.id == '$$$_index_$$$').filter(c => !c.hide)
@@ -1093,7 +1142,7 @@ class LookerDataTable {
     }
 
     // update list with colspans
-    columns = this.setColSpans(columns).filter(c => c.colspans[i] > 0)
+    columns = this.setColSpans(config, columns).filter(c => c.colspans[i] > 0)
 
     // console.log('getColumnsToDisplay i ->', i, headers)
     return columns
