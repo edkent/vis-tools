@@ -14,7 +14,7 @@ const newArray = function(length, value) {
   return arr
 }
 
-const lookerDataTableOptions = {
+const lookerDataTableCoreOptions = {
   columnOrder: {},
   subtotalDepth: {
     section: "Table",
@@ -289,8 +289,127 @@ class LookerDataTable {
     // addRowNumbers // to Index Column only?
   }
 
-  static getOptions() {
-    return lookerDataTableOptions
+  /**
+   * Builds new config object based on available dimensions and measures
+   * @param {*} table 
+   */
+  getConfigOptions() {
+    var newOptions = lookerDataTableCoreOptions
+
+    for (var i = 0; i < this.dimensions.length; i++) {
+      newOptions['label|' + this.dimensions[i].name] = {
+        section: 'Dimensions',
+        type: 'string',
+        label: this.dimensions[i].label,
+        default: this.dimensions[i].label,
+        order: i * 10 + 1,
+      }
+
+      newOptions['heading|' + this.dimensions[i].name] = {
+        section: 'Dimensions',
+        type: 'string',
+        label: 'Heading',
+        default: '',
+        order: i * 10 + 2,
+      }
+
+      newOptions['hide|' + this.dimensions[i].name] = {
+        section: 'Dimensions',
+        type: 'boolean',
+        label: 'Hide',
+        display_size: 'third',
+        order: i * 10 + 3,
+      }
+    }
+
+    for (var i = 0; i < this.measures.length; i++) {
+      newOptions['label|' + this.measures[i].name] = {
+        section: 'Measures',
+        type: 'string',
+        label: this.measures[i].label_short || this.measures[i].label,
+        default: this.measures[i].label_short || this.measures[i].label,
+        order: 100 + i * 10 + 1,
+      }
+
+      newOptions['heading|' + this.measures[i].name] = {
+        section: 'Measures',
+        type: 'string',
+        label: 'Heading for ' + ( this.measures[i].label_short || this.measures[i].label ),
+        default: '',
+        order: 100 + i * 10 + 2,
+      }
+
+      newOptions['style|' + this.measures[i].name] = {
+        section: 'Measures',
+        type: 'string',
+        label: 'Style',
+        display: 'select',
+        values: [
+          {'Normal': 'normal'},
+          {'Black/Red': 'black_red'},
+          {'Hide': 'hide'}
+        ],
+        order: 100 + i * 10 + 3
+      }
+
+      var comparisonOptions = []
+      // pivoted measures
+      if (this.measures[i].can_pivot) {
+        var pivotComparisons = []
+        for (var p = 0; p < this.pivot_fields.length; p++) {
+          var option = {}
+          option['By ' + this.pivot_fields[p]] = this.pivot_fields[p]
+          pivotComparisons.push(option)
+        }
+        comparisonOptions = comparisonOptions.concat(pivotComparisons)
+      }
+      // row totals and supermeasures
+      for (var j = 0; j < this.measures.length; j++) {
+        var includeMeasure = this.measures[i].can_pivot === this.measures[j].can_pivot
+                              || 
+                            this.has_row_totals && !this.measures[j].is_table_calculation         
+        if (i != j && includeMeasure) {
+          var option = {}
+          option['vs. ' + this.measures[j].label] = this.measures[j].name
+          comparisonOptions.push(option)
+        }
+      }
+      comparisonOptions.unshift({ '(none)': 'no_variance'})
+
+      newOptions['comparison|' + this.measures[i].name] = {
+        section: 'Measures',
+        type: 'string',
+        label: 'Comparison', // for ' + ( this.measures[i].label_short || this.measures[i].label ),
+        display: 'select',
+        values: comparisonOptions,
+        order: 100 + i * 10 + 5
+      }
+
+      newOptions['switch|' + this.measures[i].name] = {
+        section: 'Measures',
+        type: 'boolean',
+        label: 'Switch',
+        display_size: 'third',
+        order: 100 + i * 10 + 6,
+      }
+
+      newOptions['var_num|' + this.measures[i].name] = {
+        section: 'Measures',
+        type: 'boolean',
+        label: 'Var #',
+        display_size: 'third',
+        order: 100 + i * 10 + 7,
+      }
+
+      newOptions['var_pct|' + this.measures[i].name] = {
+        section: 'Measures',
+        type: 'boolean',
+        label: 'Var %',
+        display_size: 'third',
+        order: 100 + i * 10 + 8,
+      }
+    }
+    return newOptions
   }
 
   checkPivotsAndSupermeasures(queryResponse) {
