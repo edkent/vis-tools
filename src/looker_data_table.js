@@ -120,7 +120,7 @@ class Row {
  * @class
  */
 class Column {
-  constructor(id, table, parent = {}) {
+  constructor(id, table, parent) {
     this.id = id
     this.table = table
     this.parent = parent
@@ -129,23 +129,15 @@ class Column {
     this.idx = 0
     this.pos = 0
     this.levels = []
+    this.pivot_key = '' 
 
-    this.heading = parent.heading || ''
-    this.short_name = parent.short_name || ''
+    // this.field_name = parent.field_name
     this.unit = parent.unit || ''
-    this.label = parent.label || '' 
-    this.view = parent.view || '' 
-    this.calculation_type = parent.calculation_type || ''
-    this.value_format = parent.value_format || ''
-    this.field_name = parent.field_name
-    this.type = parent.type
-    this.align = parent.type
-
+    this.hide = parent.hide || false
+    this.variance_type = '' // empty | absolute | percentage
     this.pivoted = false
     this.subtotal = false
     this.super = false
-    this.pivot_key = '' 
-    this.hide = false
     
     this.sort_by_measure_values = [] // [index -1|dimension 0|measure 1|row totals & supermeasures 2, column number, [measure values]  ]
     this.sort_by_pivot_values = []   // [index -1|dimension 0|measure 1|row totals & supermeasures 2, [pivot values], column number    ]
@@ -160,26 +152,35 @@ class Column {
   getLabel (params) {
     var defaultParams = {
       hasPivots: false,
-      withPivots: false,
       level: 0,
     }
     params = Object.assign(defaultParams, params)
 
-    var label = this.table.useShortName ? this.short_name || this.label : this.label
+    switch (this.variance_type) {
+      case 'absolute':
+        var label = 'Var #'
+        break;
+      case 'percentage':
+        var label = 'Var %'
+        break;
+      default:
+        var label = this.table.useShortName ? this.parent.short_name || this.parent.label : this.parent.label
+    }
 
-    var key = 'label|' + this.field_name
-    if (typeof this.table.config[key] !== 'undefined' && this.table.config[key] !== this.label) {
+    var key = 'label|' + this.parent.name
+    if (typeof this.table.config[key] !== 'undefined' && this.table.config[key] !== this.parent.label) {
       label = this.table.config[key] ? this.table.config[key] : label
     }
+
     if (this.table.useViewName) { 
-      label = [this.view, label].join(' ') 
+      label = [this.parent.view, label].join(' ') 
     }
 
     if (this.table.has_pivots) { 
-      if (params.withPivots) {
-        var pivots = this.levels.join(' ')
-        label = [label, pivots].join(' ') 
-      }
+      // if (params.withPivots) {
+      //   var pivots = this.levels.join(' ')
+      //   label = [label, pivots].join(' ') 
+      // }
       if (this.table.sortColsBy === 'getSortByPivots') {
         if (params.level < this.levels.length) {
           label = this.levels[params.level]
@@ -195,17 +196,16 @@ class Column {
       } 
     } else { // flat table
       if (this.table.useHeadings && params.level === 0) {
-        var key = 'heading|' + this.field_name
+        var key = 'heading|' + this.parent.name
         if (typeof this.table.config[key] !== 'undefined') {
-          label = this.table.config[key] ? this.table.config[key] : this.heading
+          label = this.table.config[key] ? this.table.config[key] : this.parent.heading
         } else {
-          label = this.heading
+          label = this.parent.heading
         }
       } else {
         // label already set
       }
     }
-
     return label
   }
 
@@ -481,17 +481,17 @@ class LookerDataTable {
     })
   }
 
-  applyVisToolsTags(lookerColumn, reportColumn) {
-    if (typeof lookerColumn.tags !== 'undefined') {
-      for (var t = 0; t < lookerColumn.tags.length; t++) {
-        var tags = lookerColumn.tags[t].split(':')
+  applyVisToolsTags(lookmlField, visModelField) {
+    if (typeof lookmlField.tags !== 'undefined') {
+      for (var t = 0; t < lookmlField.tags.length; t++) {
+        var tags = lookmlField.tags[t].split(':')
         if (tags[0] === 'vis-tools') {
           if (tags[1] === 'heading') {
-            reportColumn.heading = tags[2]
+            visModelField.heading = tags[2]
           } else if (tags[1] === 'short_name') {
-            reportColumn.short_name = tags[2]
+            visModelField.short_name = tags[2]
           } else if (tags[1] === 'unit') {
-            reportColumn.unit = tags[2]
+            visModelField.unit = tags[2]
           }
         }
       }
@@ -500,31 +500,33 @@ class LookerDataTable {
 
   addDimensions(config, queryResponse, col_idx) {
     for (var d = 0; d < queryResponse.fields.dimension_like.length; d++) {
+      var id = queryResponse.fields.dimension_like[d].name
       var newDimension = {
         type: 'dimension',
         align: 'left',
-        name: queryResponse.fields.dimension_like[d].name,
+        name: id,
         label: queryResponse.fields.dimension_like[d].label_short || queryResponse.fields.dimension_like[d].label,
         view: queryResponse.fields.dimension_like[d].view_label || '',
+      }
+      if (typeof config['hide|' + id] !== 'undefined') {
+        if (config['hide|' + id]) {
+          newDimension.hide = true
+        }
       }
       this.applyVisToolsTags(queryResponse.fields.dimension_like[d], newDimension)
       this.dimensions.push(newDimension)
 
-      var column = new Column(queryResponse.fields.dimension_like[d].name, this, newDimension) 
+      var column = new Column(id, this, newDimension) 
       column.idx = col_idx
       column.levels = newArray(queryResponse.fields.pivots.length, '') // populate empty levels when pivoted
       column.field = queryResponse.fields.dimension_like[d]
-      column.field_name = column.field.name
+      // column.field_name = column.field.name
       column.pivoted = false
       column.super = false
       column.sort_by_measure_values = [0, col_idx, ...newArray(this.pivot_fields.length, 0)]
       column.sort_by_pivot_values = [0, ...newArray(this.pivot_fields.length, 0), col_idx]
 
-      if (typeof config['hide|' + column.id] !== 'undefined') {
-        if (config['hide|' + column.id]) {
-          column.hide = true
-        }
-      }
+      
 
       this.columns.push(column)
       col_idx += 10
@@ -586,7 +588,7 @@ class LookerDataTable {
             column.pivoted = true
             column.super = false
             column.pivot_key = pivotKey
-            column.field_name = measureName
+            // column.field_name = measureName
 
             if (this.pivot_values[p]['key'] !== '$$$_row_total_$$$') {
               column.sort_by_measure_values = [1, m, ...level_sort_values]
@@ -617,7 +619,7 @@ class LookerDataTable {
           column.pos = col_idx
         }
         column.field = queryResponse.fields.measure_like[m]
-        column.field_name = column.field.name
+        // column.field_name = column.field.name
         column.pivoted = false
         column.super = false
         column.sort_by_measure_values = [1, column.pos]
@@ -631,37 +633,35 @@ class LookerDataTable {
     // add supermeasures, if present
     if (typeof queryResponse.fields.supermeasure_like !== 'undefined') {
       for (var s = 0; s < queryResponse.fields.supermeasure_like.length; s++) {
-        var column_name = queryResponse.fields.supermeasure_like[s].name
+        var id = queryResponse.fields.supermeasure_like[s].name
         var newSuperMeasure = {
-          name: queryResponse.fields.supermeasure_like[s].name,
+          name: id,
+          type: 'measure',
           label: queryResponse.fields.supermeasure_like[s].label,
           view: '',
-          can_pivot: false
+          heading: '',
+          short_name: '',
+          unit: '',
+          can_pivot: false,
+          hide: false
+        }
+        if (typeof config['style|' + id] !== 'undefined') {
+          if (config['style|' + id] === 'hide') {
+            newSuperMeasure.hide = true
+          }
         }
         this.applyVisToolsTags(queryResponse.fields.supermeasure_like[s], newSuperMeasure)
         this.measures.push(newSuperMeasure) 
 
-        var column = new Column(column_name, this, newSuperMeasure)
+        var column = new Column(id, this, newSuperMeasure)
         column.idx = col_idx
         column.levels = newArray(queryResponse.fields.pivots.length, '')
         column.field = queryResponse.fields.supermeasure_like[s]
-        column.label = column.field.label_short || column.field.label
-        column.heading = newSuperMeasure.heading
-        column.short_name = newSuperMeasure.short_name
-        column.unit = newSuperMeasure.unit
-        column.view = column.field.view_label
-        column.type = 'measure'
-        column.align = 'right'
-        column.value_format = column.field.value_format
         column.pivoted = false
         column.super = true
         column.sort_by_measure_values = [2, col_idx, ...newArray(this.pivot_fields.length, 1)]
         column.sort_by_pivot_values = [2, ...newArray(this.pivot_fields.length, 1), col_idx]
-        if (typeof config['style|' + column.id] !== 'undefined') {
-          if (config['style|' + column.id] === 'hide') {
-            column.hide = true
-          }
-        }
+
         this.columns.push(column)
         col_idx += 10
       }
@@ -669,11 +669,8 @@ class LookerDataTable {
   }
 
   buildIndexColumn(queryResponse) {
-    var index_column = new Column('$$$_index_$$$', this)
-    var lastDimension = this.dimensions[this.dimensions.length - 1]
-    
-    index_column.label = lastDimension.label
-    index_column.align = 'left'
+    var index_column = new Column('$$$_index_$$$', this, this.dimensions[this.dimensions.length - 1])
+
     index_column.levels = newArray(queryResponse.fields.pivots.length, '')
     index_column.sort_by_measure_values = [-1, 0, ...newArray(this.pivot_fields.length, 0)]
     index_column.sort_by_pivot_values = [-1, ...newArray(this.pivot_fields.length, 0), 0]
@@ -689,7 +686,7 @@ class LookerDataTable {
       for (var c = 0; c < this.columns.length; c++) {
         var column = this.columns[c]
         if (column.pivoted) {
-          row.data[column.id] = lookerData[i][column.field_name][column.pivot_key]
+          row.data[column.id] = lookerData[i][column.parent.name][column.pivot_key]
         } else {
           row.data[column.id] = lookerData[i][column.id]
         }
@@ -731,10 +728,10 @@ class LookerDataTable {
           totals_row.data[column.id] = { 'value': 'TOTAL', 'cell_style': ['total'] }
         } 
 
-        if (column.type == 'measure') {
+        if (column.parent.type == 'measure') {
           if (column.pivoted == true) {
-            var cellKey = [column.pivot_key, column.field_name].join('.')
-            var cellValue = totals_[column.field_name][column.pivot_key]
+            var cellKey = [column.pivot_key, column.parent.name].join('.')
+            var cellValue = totals_[column.parent.name][column.pivot_key]
             cellValue.cell_style = ['total']
             if (typeof cellValue.rendered == 'undefined' && typeof cellValue.html !== 'undefined' ){ // totals data may include html but not rendered value
               cellValue.rendered = this.getRenderedFromHtml(cellValue)
@@ -923,11 +920,11 @@ class LookerDataTable {
           subtotal.data[this.columns[d]['id']] = {'value':  subtotal_label, 'cell_style': ['total']}
         } 
 
-        if (column.type == 'measure') {
+        if (column.parent.type == 'measure') {
           var subtotal_value = 0
           var subtotal_items = 0
           if (column.pivoted) {
-            var cellKey = [column.pivot_key, column.field_name].join('.') 
+            var cellKey = [column.pivot_key, column.parent.name].join('.') 
           } else {
             var cellKey = column.id
           }
@@ -941,12 +938,12 @@ class LookerDataTable {
             } 
           }
 
-          if (column.calculation_type === 'average' && subtotal_items > 0) {
+          if (column.parent.calculation_type === 'average' && subtotal_items > 0) {
             subtotal_value = subtotal_value / subtotal_items
           }
           var cellValue = {
             value: subtotal_value,
-            rendered: column.value_format === '' ? subtotal_value.toString() : SSF.format(column.value_format, subtotal_value),
+            rendered: column.parent.value_format === '' ? subtotal_value.toString() : SSF.format(column.parent.value_format, subtotal_value),
             cell_style: ['total']
           }
           subtotal.data[cellKey] = cellValue
@@ -1007,8 +1004,8 @@ class LookerDataTable {
             // console.log('...column', column.id)
   
             if (column.pivoted && column.levels[0] == pivot) {
-              if (column.field_name == measure) {
-                // console.log('......pivoted, pivot, measure', column.pivoted, column.levels[0], column.field_name)
+              if (column.parent.name == measure) {
+                // console.log('......pivoted, pivot, measure', column.pivoted, column.levels[0], column.parent.name)
                 // console.log('......VALID COLUMN')
                 subtotal_col.columns.push(column.id)
               }
@@ -1060,8 +1057,7 @@ class LookerDataTable {
       column.pivoted = true
       column.subtotal = true
       column.pivot_key = [subtotal.pivot, '$$$_subtotal_$$$'].join('|')
-      column.field_name = subtotal.field
-      column.align = parent.align
+      // column.field_name = subtotal.field
       this.columns.push(column)
     }
     this.sortColumns()
@@ -1078,7 +1074,7 @@ class LookerDataTable {
         }
         row.data[subtotal.id] = {
           value: subtotal_value,
-          rendered: column.value_format === '' ? subtotal_value.toString() : SSF.format(column.value_format, subtotal_value),
+          rendered: column.value_format === '' ? subtotal_value.toString() : SSF.format(column.parent.value_format, subtotal_value),
           align: 'right'
         }
         if (['total', 'subtotal'].includes(row.type)) { row.data[subtotal.id].cell_style = ['total'] }
@@ -1126,27 +1122,25 @@ class LookerDataTable {
 
   createVarianceColumn (colpair, config) {
     var id = ['$$$_variance_$$$', colpair.calc, colpair.variance.baseline, colpair.variance.comparison].join('|')
-    var baseline_measure = this.getMeasureByName(colpair.variance.baseline)
     var baseline = this.getColumnById(colpair.variance.baseline)
     var comparison = this.getColumnById(colpair.variance.comparison)
-    var column = new Column(id, this, baseline_measure)
+    var column = new Column(id, this, baseline.parent)
 
     if (colpair.calc === 'absolute') {
+      column.variance_type = 'absolute'
       column.idx = baseline.idx + 1
       column.pos = baseline.pos + 1
       column.sort_by_measure_values = baseline.sort_by_measure_values.concat(1)
       column.sort_by_pivot_values = baseline.sort_by_pivot_values.concat(1)
-      column.label = 'Var #'
-      column.unit = baseline_measure.unit
-      column.hide = !config['var_num|' + baseline.field_name]
+      column.hide = !config['var_num|' + baseline.parent.name]
     } else {
+      column.variance_type = 'percentage'
       column.idx = baseline.idx + 2
       column.pos = baseline.pos + 2
       column.sort_by_measure_values = baseline.sort_by_measure_values.concat(2)
       column.sort_by_pivot_values = baseline.sort_by_pivot_values.concat(2)
-      column.label = 'Var %'
       column.unit = '%'
-      column.hide = !config['var_pct|' + baseline_measure.field_name]
+      column.hide = !config['var_pct|' + baseline.parent.name]
     }
 
     if (baseline.sort_by_measure_values.length < column.sort_by_measure_values.length) {
@@ -1158,7 +1152,6 @@ class LookerDataTable {
     // idea to test when vs_pivot variance is added
     // if (config.sortColumnsBy === 'getSortByPivots') {
     //   column.sort_by_pivot_values[0] = 1.5
-    //   column.label = baseline.field_name + ' ' + column.label
     // }
 
     if (typeof config.columnOrder[column.id] !== 'undefined') {
@@ -1168,19 +1161,16 @@ class LookerDataTable {
     column.field = {
       name: id
     }
-    column.heading = baseline_measure.heading
-    column.type = baseline_measure.type
     column.pivoted = baseline.pivoted
     column.super = baseline.super
     column.levels = baseline.levels
     column.pivot_key = ''
-    column.align = baseline_measure.type
 
     this.columns.push(column)
     if (colpair.variance.reverse) {
-      this.calculateVariance(baseline.value_format, id, colpair.calc, comparison, baseline)
+      this.calculateVariance(baseline.parent.value_format, id, colpair.calc, comparison, baseline)
     } else {
-      this.calculateVariance(baseline.value_format, id, colpair.calc, baseline, comparison)
+      this.calculateVariance(baseline.parent.value_format, id, colpair.calc, baseline, comparison)
     }
   }
 
@@ -1283,8 +1273,8 @@ class LookerDataTable {
       }
 
       if (this.useHeadings && !this.has_pivots) {
-        var column_heading = columns[c].heading
-        var key = 'heading|' + columns[c].field_name
+        var column_heading = columns[c].parent.heading
+        var key = 'heading|' + columns[c].parent.name
         if (typeof config[key] !== 'undefined') {
           column_heading = config[key] ? config[key] : column_heading
         } 
@@ -1365,7 +1355,7 @@ class LookerDataTable {
   getColumnsToDisplay (config, i) {
     // remove some dimension columns if we're just using a single index column
     if (this.useIndexColumn) {
-      var columns = this.columns.filter(c => c.type == 'measure' || c.id == '$$$_index_$$$').filter(c => !c.hide)
+      var columns = this.columns.filter(c => c.parent.type == 'measure' || c.id == '$$$_index_$$$').filter(c => !c.hide)
     } else {
       var columns =  this.columns.filter(c => c.id !== '$$$_index_$$$').filter(c => !c.hide)
     }
@@ -1379,7 +1369,7 @@ class LookerDataTable {
   getRow (row) {
     // filter out unwanted dimensions based on index_column setting
     if (this.useIndexColumn) {
-      var cells = this.columns.filter(c => c.type == 'measure' || c.id == '$$$_index_$$$').filter(c => !c.hide)
+      var cells = this.columns.filter(c => c.parent.type == 'measure' || c.id == '$$$_index_$$$').filter(c => !c.hide)
     } else {
       var cells =  this.columns.filter(c => c.id !== '$$$_index_$$$').filter(c => !c.hide)
     }
@@ -1396,10 +1386,11 @@ class LookerDataTable {
 
       // filter out dimension cells that a hidden / merged into a cell above
       if (row.type === 'line_item') {
-        cells = cells.filter(c => c.type == 'measure' || this.rowspan_values[row.id][c.id] > 0)
+        cells = cells.filter(c => c.parent.type == 'measure' || this.rowspan_values[row.id][c.id] > 0)
       }
     }
 
+    console.log('getRow() returning cells:', cells)
     return cells
   }
 
@@ -1409,7 +1400,7 @@ class LookerDataTable {
       var col_order = config.columnOrder
       for (var c = 0; c < this.columns.length; c++) {
         var col = this.columns[c]
-        if (col.type == 'measure' && !col.super) {
+        if (col.parent.type == 'measure' && !col.super) {
           if (col.pos >= from && col.pos < from + 10) {
             // console.log('MOVING COLUMN', col.id, col.pos, '->', col.pos + shift)
             col.pos += shift
