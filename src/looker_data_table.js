@@ -97,6 +97,40 @@ const lookerDataTableCoreOptions = {
   },
 }
 
+class ModelDimension {
+  constructor({ table, name, type, view, label, heading = '', short_name = '', unit = '', value_format = ''}) {
+    this.table = table
+    this.name = name
+    this.type = type
+    this.view = view
+    this.label = label
+    this.value_format = value_format
+    this.heading = heading
+    this.short_name = short_name
+    this.unit = unit
+    
+    if (this.type === 'dimension') {
+      this.align = 'left'
+    } else {
+      this.align = 'right'
+    }
+
+    if (typeof this.table.config['hide|' + this.name] !== 'undefined') {
+      if (this.table.config['hide|' + this.name]) {
+        this.hide = true
+      } else {
+        this.hide = false
+      }
+    }
+  }
+}
+
+class ModelMeasure extends ModelDimension {
+  constructor(name, type, label, heading, short_name, unit, value_format, align, hide) {
+    super(name, type, label, heading, short_name, unit, value_format, align, hide)
+  }
+}
+
 /**
  * Represents a row in the dataset that populates the table.
  * This may be an addtional row (e.g. subtotal) not in the original query
@@ -286,6 +320,7 @@ class LookerDataTable {
     this.buildIndexColumn(queryResponse)
     this.buildRows(lookerData)
     this.buildTotals(queryResponse)
+    console.log('table during construction', this) // REMOVE WHEN FINISHED
     this.updateRowSpanValues()
     if (config.rowSubtotals) {
       this.addSubTotals(config.subtotalDepth)
@@ -499,23 +534,17 @@ class LookerDataTable {
 
   addDimensions(config, queryResponse, col_idx) {
     for (var d = 0; d < queryResponse.fields.dimension_like.length; d++) {
-      var id = queryResponse.fields.dimension_like[d].name
-      var newDimension = {
+      var dim = new ModelDimension({
+        table: this,
+        name: queryResponse.fields.dimension_like[d].name,
         type: 'dimension',
-        align: 'left',
-        name: id,
-        label: queryResponse.fields.dimension_like[d].label_short || queryResponse.fields.dimension_like[d].label,
         view: queryResponse.fields.dimension_like[d].view_label || '',
-      }
-      if (typeof config['hide|' + id] !== 'undefined') {
-        if (config['hide|' + id]) {
-          newDimension.hide = true
-        }
-      }
-      this.applyVisToolsTags(queryResponse.fields.dimension_like[d], newDimension)
-      this.dimensions.push(newDimension)
+        label: queryResponse.fields.dimension_like[d].label_short || queryResponse.fields.dimension_like[d].label,       
+      })
+      this.applyVisToolsTags(queryResponse.fields.dimension_like[d], dim)
+      this.dimensions.push(dim)
 
-      var column = new Column(id, this, newDimension) 
+      var column = new Column(dim.name, this, dim) 
       column.idx = col_idx
       column.levels = newArray(queryResponse.fields.pivots.length, '')
       column.field = queryResponse.fields.dimension_like[d]
@@ -524,7 +553,14 @@ class LookerDataTable {
       column.sort_by_measure_values = [0, col_idx, ...newArray(this.pivot_fields.length, 0)]
       column.sort_by_pivot_values = [0, ...newArray(this.pivot_fields.length, 0), col_idx]
 
-      
+      // TODO: Fix issue with new constructor pattern breaking hide
+      if (typeof this.config['style|' + dim.name] !== 'undefined') {
+        if (this.config['style|' + dim.name] === 'hide') {
+          this.hide = true
+        } else {
+          this.hide = false
+        }
+      }
 
       this.columns.push(column)
       col_idx += 10
