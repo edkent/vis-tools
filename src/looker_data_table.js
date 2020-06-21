@@ -97,23 +97,28 @@ const lookerDataTableCoreOptions = {
   },
 }
 
-class ModelDimension {
-  constructor({ table, name, type, view, label, heading = '', short_name = '', unit = '', value_format = ''}) {
+class ModelField {
+  constructor({ table, name, view, label, value_format = '', heading = '', short_name = '', unit = ''}) {
     this.table = table
     this.name = name
-    this.type = type
     this.view = view
     this.label = label
     this.value_format = value_format
     this.heading = heading
     this.short_name = short_name
     this.unit = unit
-    
-    if (this.type === 'dimension') {
-      this.align = 'left'
-    } else {
-      this.align = 'right'
-    }
+  }
+}
+
+class ModelDimension extends ModelField {
+  constructor({ 
+    table, name, view, label, 
+    value_format = '', heading = '', short_name = '', unit = ''
+  }) {
+    super({ table, name, view, label, value_format, heading, short_name, unit })
+
+    this.type = 'dimension'    
+    this.align = 'left'
 
     if (typeof this.table.config['hide|' + this.name] !== 'undefined') {
       if (this.table.config['hide|' + this.name]) {
@@ -126,8 +131,26 @@ class ModelDimension {
 }
 
 class ModelMeasure extends ModelDimension {
-  constructor(name, type, label, heading, short_name, unit, value_format, align, hide) {
-    super(name, type, label, heading, short_name, unit, value_format, align, hide)
+  constructor({ 
+    table, name, view, label, 
+    is_table_calculation, calculation_type, can_pivot,
+    heading = '', short_name = '', unit = '', value_format = ''
+  }) {
+    super({ table, name, view, label, value_format, heading, short_name, unit })
+
+    this.type = 'measure'
+    this.is_table_calculation = is_table_calculation
+    this.calculation_type = calculation_type
+    this.can_pivot = can_pivot
+    this.align = 'right'
+
+    if (typeof this.table.config['style|' + this.name] !== 'undefined') {
+      if (this.table.config['style|' + this.name] === 'hide') {
+        this.hide = true
+      } else {
+        this.hide = false
+      }
+    }
   }
 }
 
@@ -570,22 +593,33 @@ class LookerDataTable {
   addMeasures(config, queryResponse, col_idx) {
     // add measures, list of ids
     for (var m = 0; m < queryResponse.fields.measure_like.length; m++) {
-      var newMeasure = {
-        type: 'measure',
-        align: 'right',
+      var newMeasure = new ModelMeasure({
+        table: this,
         name: queryResponse.fields.measure_like[m].name,
-        label: queryResponse.fields.measure_like[m].label_short || queryResponse.fields.measure_like[m].label,
         view: queryResponse.fields.measure_like[m].view_label || '',
+        label: queryResponse.fields.measure_like[m].label_short || queryResponse.fields.measure_like[m].label,
+        value_format: queryResponse.fields.measure_like[m].value_format || '',
         is_table_calculation: typeof queryResponse.fields.measure_like[m].is_table_calculation !== 'undefined',
         can_pivot: true,
         calculation_type: queryResponse.fields.measure_like[m].type,
-        value_format: queryResponse.fields.measure_like[m].value_format || ''
-      }
-      if (typeof config['style|' + newMeasure.name] !== 'undefined') {
-        if (config['style|' + newMeasure.name] === 'hide') {
-          newMeasure.hide = true
-        }
-      }
+      })
+      // console.log('new ModelMeasure', mea)
+      // var newMeasure = {
+      //   type: 'measure',
+      //   align: 'right',
+      //   name: queryResponse.fields.measure_like[m].name,
+      //   label: queryResponse.fields.measure_like[m].label_short || queryResponse.fields.measure_like[m].label,
+      //   view: queryResponse.fields.measure_like[m].view_label || '',
+      //   is_table_calculation: typeof queryResponse.fields.measure_like[m].is_table_calculation !== 'undefined',
+      //   can_pivot: true,
+      //   calculation_type: queryResponse.fields.measure_like[m].type,
+      //   value_format: queryResponse.fields.measure_like[m].value_format || ''
+      // }
+      // if (typeof config['style|' + newMeasure.name] !== 'undefined') {
+      //   if (config['style|' + newMeasure.name] === 'hide') {
+      //     newMeasure.hide = true
+      //   }
+      // }
       this.applyVisToolsTags(queryResponse.fields.measure_like[m], newMeasure)
       this.measures.push(newMeasure) 
     }
@@ -665,27 +699,36 @@ class LookerDataTable {
     // add supermeasures, if present
     if (typeof queryResponse.fields.supermeasure_like !== 'undefined') {
       for (var s = 0; s < queryResponse.fields.supermeasure_like.length; s++) {
-        var id = queryResponse.fields.supermeasure_like[s].name
-        var newSuperMeasure = {
-          name: id,
-          type: 'measure',
-          label: queryResponse.fields.supermeasure_like[s].label,
+        var meas = new ModelMeasure({
+          table: this,
+          name: queryResponse.fields.supermeasure_like[s].name,
           view: '',
-          heading: '',
-          short_name: '',
-          unit: '',
+          label: queryResponse.fields.supermeasure_like[s].label,
+          is_table_calculation: queryResponse.fields.supermeasure_like[s].is_table_calculation,
+          calculation_type: queryResponse.fields.supermeasure_like[s].type,
           can_pivot: false,
-          hide: false
-        }
-        if (typeof config['style|' + id] !== 'undefined') {
-          if (config['style|' + id] === 'hide') {
-            newSuperMeasure.hide = true
-          }
-        }
-        this.applyVisToolsTags(queryResponse.fields.supermeasure_like[s], newSuperMeasure)
-        this.measures.push(newSuperMeasure) 
+        })
+        // var id = queryResponse.fields.supermeasure_like[s].name
+        // var newSuperMeasure = {
+        //   name: id,
+        //   type: 'measure',
+        //   label: queryResponse.fields.supermeasure_like[s].label,
+        //   view: '',
+        //   heading: '',
+        //   short_name: '',
+        //   unit: '',
+        //   can_pivot: false,
+        //   hide: false
+        // }
+        // if (typeof config['style|' + newSuperMeasure.name] !== 'undefined') {
+        //   if (config['style|' + newSuperMeasure.name] === 'hide') {
+        //     newSuperMeasure.hide = true
+        //   }
+        // }
+        this.applyVisToolsTags(queryResponse.fields.supermeasure_like[s], meas)
+        this.measures.push(meas) 
 
-        var column = new Column(id, this, newSuperMeasure)
+        var column = new Column(meas.name, this, meas)
         column.idx = col_idx
         column.levels = newArray(queryResponse.fields.pivots.length, '')
         column.field = queryResponse.fields.supermeasure_like[s]
