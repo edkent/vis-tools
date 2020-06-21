@@ -337,23 +337,22 @@ class LookerDataTable {
 
     var col_idx = 0
     this.checkPivotsAndSupermeasures(queryResponse)
-    this.checkVarianceCalculations(config)
-    this.addDimensions(config, queryResponse, col_idx)
-    this.addMeasures(config, queryResponse, col_idx)
+    this.checkVarianceCalculations()
+    this.addDimensions(queryResponse, col_idx)
+    this.addMeasures(queryResponse, col_idx)
     this.buildIndexColumn(queryResponse)
     this.buildRows(lookerData)
     this.buildTotals(queryResponse)
-    console.log('table during construction', this) // REMOVE WHEN FINISHED
     this.updateRowSpanValues()
-    if (config.rowSubtotals) {
+    if (this.config.rowSubtotals) {
       this.addSubTotals(config.subtotalDepth)
     }
-    if (config.colSubtotals && this.pivot_fields.length == 2) {
+    if (this.config.colSubtotals && this.pivot_fields.length == 2) {
       this.addColumnSubTotals()
     }
-    this.addVarianceColumns(config)
+    this.addVarianceColumns()
     this.sortColumns()
-    this.applyFormatting(config)
+    this.applyFormatting()
 
     // TODO: more formatting options
     // addSpacerColumns
@@ -509,7 +508,8 @@ class LookerDataTable {
     }
   }
 
-  checkVarianceCalculations(config) {
+  checkVarianceCalculations() {
+    var config = this.config
     Object.keys(config).forEach(option => {
       if (option.startsWith('comparison')) {
         var baseline = option.split('|')[1]
@@ -555,7 +555,7 @@ class LookerDataTable {
     }
   }
 
-  addDimensions(config, queryResponse, col_idx) {
+  addDimensions(queryResponse, col_idx) {
     for (var d = 0; d < queryResponse.fields.dimension_like.length; d++) {
       var dim = new ModelDimension({
         table: this,
@@ -590,7 +590,8 @@ class LookerDataTable {
     }
   }
 
-  addMeasures(config, queryResponse, col_idx) {
+  addMeasures(queryResponse, col_idx) {
+    var config = this.config
     // add measures, list of ids
     for (var m = 0; m < queryResponse.fields.measure_like.length; m++) {
       var newMeasure = new ModelMeasure({
@@ -603,23 +604,7 @@ class LookerDataTable {
         can_pivot: true,
         calculation_type: queryResponse.fields.measure_like[m].type,
       })
-      // console.log('new ModelMeasure', mea)
-      // var newMeasure = {
-      //   type: 'measure',
-      //   align: 'right',
-      //   name: queryResponse.fields.measure_like[m].name,
-      //   label: queryResponse.fields.measure_like[m].label_short || queryResponse.fields.measure_like[m].label,
-      //   view: queryResponse.fields.measure_like[m].view_label || '',
-      //   is_table_calculation: typeof queryResponse.fields.measure_like[m].is_table_calculation !== 'undefined',
-      //   can_pivot: true,
-      //   calculation_type: queryResponse.fields.measure_like[m].type,
-      //   value_format: queryResponse.fields.measure_like[m].value_format || ''
-      // }
-      // if (typeof config['style|' + newMeasure.name] !== 'undefined') {
-      //   if (config['style|' + newMeasure.name] === 'hide') {
-      //     newMeasure.hide = true
-      //   }
-      // }
+
       this.applyVisToolsTags(queryResponse.fields.measure_like[m], newMeasure)
       this.measures.push(newMeasure) 
     }
@@ -708,23 +693,6 @@ class LookerDataTable {
           calculation_type: queryResponse.fields.supermeasure_like[s].type,
           can_pivot: false,
         })
-        // var id = queryResponse.fields.supermeasure_like[s].name
-        // var newSuperMeasure = {
-        //   name: id,
-        //   type: 'measure',
-        //   label: queryResponse.fields.supermeasure_like[s].label,
-        //   view: '',
-        //   heading: '',
-        //   short_name: '',
-        //   unit: '',
-        //   can_pivot: false,
-        //   hide: false
-        // }
-        // if (typeof config['style|' + newSuperMeasure.name] !== 'undefined') {
-        //   if (config['style|' + newSuperMeasure.name] === 'hide') {
-        //     newSuperMeasure.hide = true
-        //   }
-        // }
         this.applyVisToolsTags(queryResponse.fields.supermeasure_like[s], meas)
         this.measures.push(meas) 
 
@@ -834,7 +802,8 @@ class LookerDataTable {
   /**
    * Applies conditional formatting (red if negative) to all measure columns set to use it 
    */
-  applyFormatting(config) {
+  applyFormatting() {
+    var config = this.config
     for (var c = 0; c < this.columns.length; c++) {
       var col = this.columns[c]
       if (typeof config['style|' + col.id] !== 'undefined') {
@@ -1015,6 +984,8 @@ class LookerDataTable {
 
           if (column.parent.calculation_type === 'average' && subtotal_items > 0) {
             subtotal_value = subtotal_value / subtotal_items
+          } else if (column.parent.calculation_type === 'string') {
+            subtotal_value = ''
           }
           var cellValue = {
             value: subtotal_value,
@@ -1176,7 +1147,8 @@ class LookerDataTable {
     }
   }
 
-  createVarianceColumn (colpair, config) {
+  createVarianceColumn (colpair) {
+    var config = this.config
     var id = ['$$$_variance_$$$', colpair.calc, colpair.variance.baseline, colpair.variance.comparison].join('|')
     var baseline = this.getColumnById(colpair.variance.baseline)
     var comparison = this.getColumnById(colpair.variance.comparison)
@@ -1233,7 +1205,8 @@ class LookerDataTable {
   /**
    * Function to add variance columns directly within table vis rather than requiring a table calc
    */
-  addVarianceColumns (config) {
+  addVarianceColumns () {
+    var config = this.config
     var variance_colpairs = []
     var calcs = ['absolute', 'percent']
     
@@ -1272,7 +1245,7 @@ class LookerDataTable {
     })
     
     variance_colpairs.forEach(colpair => {
-      this.createVarianceColumn(colpair, config)
+      this.createVarianceColumn(colpair)
     })
   }
 
@@ -1309,7 +1282,8 @@ class LookerDataTable {
    * Performs horizontal cell merge of header values by calculating required colspan values
    * @param {*} columns 
    */
-  setColSpans (config, columns) {
+  setColSpans (columns) {
+    var config = this.config
     var header_levels = []
     var span_values = []
     var span_tracker = []
@@ -1404,14 +1378,15 @@ class LookerDataTable {
    * Builds list of columns out of data set that should be displayed
    * @param {*} i 
    */
-  getColumnsToDisplay (config, i) {
+  getColumnsToDisplay (i) {
+    var config = this.config
     if (this.useIndexColumn) {
       var columns = this.columns.filter(c => c.parent.type == 'measure' || c.id == '$$$_index_$$$').filter(c => !c.hide)
     } else {
       var columns =  this.columns.filter(c => c.id !== '$$$_index_$$$').filter(c => !c.hide)
     }
 
-    columns = this.setColSpans(config, columns).filter(c => c.colspans[i] > 0)
+    columns = this.setColSpans(columns).filter(c => c.colspans[i] > 0)
 
     return columns
   }
@@ -1442,7 +1417,8 @@ class LookerDataTable {
     return cells
   }
 
-  moveColumns(config, from, to, callback) {
+  moveColumns(from, to, callback) {
+    var config = this.config
     if (from != to) {
       var shift = to - from
       var col_order = config.columnOrder
