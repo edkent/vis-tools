@@ -965,31 +965,39 @@ class LookerDataTable {
         } 
 
         if (column.parent.type == 'measure') {
-          var subtotal_value = 0
-          var subtotal_items = 0
           if (column.pivoted) {
             var cellKey = [column.pivot_key, column.parent.name].join('.') 
           } else {
             var cellKey = column.id
           }
-          for (var mr = 0; mr < this.data.length; mr++) {
+
+          var subtotal_value = this.data[0].data[cellKey].value // 0
+          var subtotal_items = 0
+          var rendered = ''
+          for (var mr = 1; mr < this.data.length; mr++) { // var mr = 0
             var data_row = this.data[mr]
             if (data_row.type == 'line_item' && data_row.sort[1] == s) {
-              subtotal_value += data_row.data[cellKey].value
-              if (data_row.data[cellKey].value || data_row.data[cellKey].value === 0) {
+              var value = data_row.data[cellKey].value
+              if (Number.isFinite(value)) {
+                subtotal_value += value
                 subtotal_items++
               }
+              // if (data_row.data[cellKey].value || data_row.data[cellKey].value === 0) {
+              //   subtotal_items++
+              // }
             } 
           }
-
+          
           if (column.parent.calculation_type === 'average' && subtotal_items > 0) {
             subtotal_value = subtotal_value / subtotal_items
+            rendered = column.parent.value_format === '' ? subtotal_value.toString() : SSF.format(column.parent.value_format, subtotal_value)
           } else if (column.parent.calculation_type === 'string') {
             subtotal_value = ''
+            rendered = ''
           }
           var cellValue = {
             value: subtotal_value,
-            rendered: column.parent.value_format === '' ? subtotal_value.toString() : SSF.format(column.parent.value_format, subtotal_value),
+            rendered: rendered,
             cell_style: ['total']
           }
           subtotal.data[cellKey] = cellValue
@@ -1131,10 +1139,18 @@ class LookerDataTable {
         }
       } else {
         var value = (baseline_value - comparison_value) / Math.abs(comparison_value)
-        var cell_value = {
-          value: value,
-          rendered: SSF.format('#0.00%', value),
-          cell_style: []
+        if (!isFinite(value)) {
+          var cell_value = {
+            value: null,
+            rendered: '∞',
+            cell_style: []
+          }
+        } else {
+          var cell_value = {
+            value: value,
+            rendered: SSF.format('#0.00%', value),
+            cell_style: []
+          }
         }
       }
       if (row.type == 'total' || row.type == 'subtotal') {
