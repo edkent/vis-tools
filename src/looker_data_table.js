@@ -728,14 +728,19 @@ class LookerDataTable {
       // flatten data, if pivoted. Looker's data structure is nested for pivots (to a single level, no matter how many pivots)
       for (var c = 0; c < this.columns.length; c++) {
         var column = this.columns[c]
+        
         if (column.pivoted) {
           row.data[column.id] = lookerData[i][column.parent.name][column.pivot_key]
         } else {
           row.data[column.id] = lookerData[i][column.id]
         }
+
         if (typeof row.data[column.id] !== 'undefined') {
           if (typeof row.data[column.id].cell_style === 'undefined') {
             row.data[column.id].cell_style = []
+          }
+          if (row.data[column.id].value === null) {
+            row.data[column.id].rendered = ''
           }
         }
       }
@@ -761,16 +766,20 @@ class LookerDataTable {
     if (typeof queryResponse.totals_data !== 'undefined') {
       var totals_ = queryResponse.totals_data
 
+      var firstVisibleDimension = this.dimensions[0].name
+      for (var d = 0; d < this.dimensions.length; d++) {
+        if (!this.dimensions[d].hide) {
+          firstVisibleDimension = this.dimensions[d].name
+          break
+        }
+      }
+
       var totals_row = new Row('total')
 
       for (var c = 0; c < this.columns.length; c++) {
         var column = this.columns[c]
-        totals_row.data[column.id] = { 'value': '' } // set a default on all columns
-
-        if (column.id == this.dimensions[this.dimensions.length-1].name) {
-          totals_row.data[column.id] = { 'value': 'TOTAL', 'cell_style': ['total'] }
-        } 
-
+        totals_row.data[column.id] = { value: '', cell_style: ['total'] } // set a default on all columns
+        
         if (column.parent.type == 'measure') {
           if (column.pivoted == true) {
             var cellKey = [column.pivot_key, column.parent.name].join('.')
@@ -791,8 +800,9 @@ class LookerDataTable {
           totals_row.data[column.id].cell_style = ['total']
         }
       } 
+      totals_row.data['$$$_index_$$$'].value = 'TOTAL'
+      totals_row.data[firstVisibleDimension].value = 'TOTAL' 
       totals_row.sort = [1, 0, 0]
-      totals_row.data['$$$_index_$$$'] = { 'value': 'TOTAL', cell_style: ['total'] }
 
       this.data.push(totals_row)
       this.has_totals = true
@@ -951,17 +961,25 @@ class LookerDataTable {
       }
     }
 
+    var firstVisibleDimension = this.dimensions[0].name
+    for (var d = 0; d < this.dimensions.length; d++) {
+      if (!this.dimensions[d].hide) {
+        firstVisibleDimension = this.dimensions[d].name
+        break
+      }
+    }
+
     // GENERATE DATA ROWS FOR SUBTOTALS
     for (var s = 0; s < subTotals.length; s++) {
       var subtotal = new Row('subtotal')
 
       for (var d = 0; d < this.columns.length; d++) {
         var column = this.columns[d]
-        subtotal.data[column.id] = {} // set default
+        subtotal.data[column.id] = { 'cell_style': ['total'] } // set default
 
-        if (this.columns[d].id === '$$$_index_$$$' || d === this.dimensions.length ) {
+        if (column.id === '$$$_index_$$$' || column.id === firstVisibleDimension ) {
           var subtotal_label = subTotals[s].join(' | ')
-          subtotal.data[this.columns[d]['id']] = {'value':  subtotal_label, 'cell_style': ['total']}
+          subtotal.data[column.id].value = subtotal_label
         } 
 
         if (column.parent.type == 'measure') {
@@ -982,19 +1000,20 @@ class LookerDataTable {
                 subtotal_value += value
                 subtotal_items++
               }
-              // if (data_row.data[cellKey].value || data_row.data[cellKey].value === 0) {
-              //   subtotal_items++
-              // }
             } 
           }
           
           if (column.parent.calculation_type === 'average' && subtotal_items > 0) {
             subtotal_value = subtotal_value / subtotal_items
+          }
+          if (subtotal_value) {
             rendered = column.parent.value_format === '' ? subtotal_value.toString() : SSF.format(column.parent.value_format, subtotal_value)
-          } else if (column.parent.calculation_type === 'string') {
+          }
+          if (column.parent.calculation_type === 'string') {
             subtotal_value = ''
             rendered = ''
-          }
+          } 
+
           var cellValue = {
             value: subtotal_value,
             rendered: rendered,
