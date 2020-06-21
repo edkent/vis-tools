@@ -131,7 +131,6 @@ class Column {
     this.levels = []
     this.pivot_key = '' 
 
-    // this.field_name = parent.field_name
     this.unit = parent.unit || ''
     this.hide = parent.hide || false
     this.variance_type = '' // empty | absolute | percentage
@@ -403,7 +402,7 @@ class LookerDataTable {
       newOptions['comparison|' + this.measures[i].name] = {
         section: 'Measures',
         type: 'string',
-        label: 'Comparison', // for ' + ( this.measures[i].label_short || this.measures[i].label ),
+        label: 'Comparison',
         display: 'select',
         values: comparisonOptions,
         order: 100 + i * 10 + 5
@@ -518,9 +517,8 @@ class LookerDataTable {
 
       var column = new Column(id, this, newDimension) 
       column.idx = col_idx
-      column.levels = newArray(queryResponse.fields.pivots.length, '') // populate empty levels when pivoted
+      column.levels = newArray(queryResponse.fields.pivots.length, '')
       column.field = queryResponse.fields.dimension_like[d]
-      // column.field_name = column.field.name
       column.pivoted = false
       column.super = false
       column.sort_by_measure_values = [0, col_idx, ...newArray(this.pivot_fields.length, 0)]
@@ -588,7 +586,6 @@ class LookerDataTable {
             column.pivoted = true
             column.super = false
             column.pivot_key = pivotKey
-            // column.field_name = measureName
 
             if (this.pivot_values[p]['key'] !== '$$$_row_total_$$$') {
               column.sort_by_measure_values = [1, m, ...level_sort_values]
@@ -619,7 +616,6 @@ class LookerDataTable {
           column.pos = col_idx
         }
         column.field = queryResponse.fields.measure_like[m]
-        // column.field_name = column.field.name
         column.pivoted = false
         column.super = false
         column.sort_by_measure_values = [1, column.pos]
@@ -960,7 +956,6 @@ class LookerDataTable {
    * Generates new column subtotals, where 2 pivot levels have been used, or 1 pivot level sorted by measure values.
    */
   addColumnSubTotals () {
-    // https://pebl.dev.looker.com/explore/pebl/trans?qid=Vm6kceDf5Xv51y3VugI71G&origin_space=6&toggle=pik,vis
     var last_pivot_key = ''
     var last_pivot_col = {}
     var subtotals = []
@@ -972,20 +967,15 @@ class LookerDataTable {
       if (p_value !== null) { pivots.push(p_value) }
     }
     pivots = [...new Set(pivots)]
-    // console.log('addColumnSubTotals pivots', pivots)
 
     for (var p = 0; p < pivots.length; p++) {
       var pivot = pivots[p]
       var highest_pivot_col = [0, '']
       var previous_subtotal = null
 
-      // console.log('Processing pivot', pivot)
-
       for (var m = 0; m < this.measures.length; m++) {
         if (this.measures[m].can_pivot) {
           var measure = this.measures[m].name
-          // console.log('...measure', measure)
-          // console.log('...pivot key', pivot)
           var subtotal_col = {
             parent: this.measures[m],
             field: measure,
@@ -996,25 +986,16 @@ class LookerDataTable {
             id: ['$$$_subtotal_$$$', pivot, measure].join('.'),
             after: ''
           }
-          // console.log('...subtotal_col init', subtotal_col)
   
           for (var c = 0; c < this.columns.length; c++) {
             var column = this.columns[c]
   
-            // console.log('...column', column.id)
-  
             if (column.pivoted && column.levels[0] == pivot) {
               if (column.parent.name == measure) {
-                // console.log('......pivoted, pivot, measure', column.pivoted, column.levels[0], column.parent.name)
-                // console.log('......VALID COLUMN')
                 subtotal_col.columns.push(column.id)
               }
               if (column.levels[0] == pivot) {
-                // console.log('......pivot', pivot)
-                // console.log('......VALID PIVOT KEY')
                 if (c > highest_pivot_col[0]) {
-                  // console.log('......current highest_pivot_col', highest_pivot_col)
-                  // console.log('......UPDATE highest_pivot_col')
                   highest_pivot_col = [c, column.id]
                 }
               }
@@ -1022,14 +1003,11 @@ class LookerDataTable {
           }
   
           if (pivot != last_pivot_key) {
-            // console.log('......pivot, last_pivot_key', pivot, last_pivot_key)
-            // console.log('......UPDATE last_pivot_col')
             last_pivot_col[pivot] = highest_pivot_col[1]
             previous_subtotal = null
           }
   
           subtotal_col.after = previous_subtotal || last_pivot_col[pivot]
-          // console.log('......AFTER', subtotal_col.after)
           last_pivot_key = pivot
           previous_subtotal = subtotal_col.id
           subtotals.push(subtotal_col)
@@ -1043,8 +1021,8 @@ class LookerDataTable {
       var parent = this.measures[subtotal.measure_idx]
       var column = new Column(subtotal.id, this, parent)
 
-      column.levels = [subtotal.pivot, 'Subtotal'] //, subtotal.field]
-      column.field = { name: subtotal.field } // Looker field definition
+      column.levels = [subtotal.pivot, 'Subtotal']
+      column.field = { name: subtotal.field }
       column.sort_by_measure_values = [1, subtotal.measure_idx, ...column.levels]
 
       var pivot_values = [...column.levels]
@@ -1057,7 +1035,6 @@ class LookerDataTable {
       column.pivoted = true
       column.subtotal = true
       column.pivot_key = [subtotal.pivot, '$$$_subtotal_$$$'].join('|')
-      // column.field_name = subtotal.field
       this.columns.push(column)
     }
     this.sortColumns()
@@ -1192,8 +1169,7 @@ class LookerDataTable {
                 calc: calc
               })
             })
-          } else {
-            // pivoted measures
+          } else { // variance.type === 'by_pivot'
             this.pivot_values.forEach(pivot_value => {
               if (!pivot_value.is_total) {
                 calcs.forEach(calc => {
@@ -1210,7 +1186,7 @@ class LookerDataTable {
               }
             })
           }
-        } else {
+        } else { // TODO: Variance across pivot columns not yet implemented
           // by_pivot
         }
       }
@@ -1228,7 +1204,6 @@ class LookerDataTable {
    */
   getRenderedFromHtml (cellValue) {
     var parser = new DOMParser()
-    // console.log('cell to renderFromHtml', cellValue)
     if (cellValue.html !== '') {
       try {
         var rendered = parser.parseFromString(cellValue.html, 'text/html')
@@ -1256,8 +1231,6 @@ class LookerDataTable {
    * @param {*} columns 
    */
   setColSpans (config, columns) {
-    // build single array of the header values
-    // use column id for the label level
     var header_levels = []
     var span_values = []
     var span_tracker = []
@@ -1267,7 +1240,7 @@ class LookerDataTable {
       var idx = columns.length - 1 - c
 
       if (this.sortColsBy === 'getSortByPivots') {
-        header_levels[idx] = [...columns[c].levels, columns[c].field.name] // columns[c].levels.concat([columns[c].field.name])
+        header_levels[idx] = [...columns[c].levels, columns[c].field.name]
       } else {
         header_levels[idx] = [columns[c].field.name, ...columns[c].levels]
       }
@@ -1353,14 +1326,12 @@ class LookerDataTable {
    * @param {*} i 
    */
   getColumnsToDisplay (config, i) {
-    // remove some dimension columns if we're just using a single index column
     if (this.useIndexColumn) {
       var columns = this.columns.filter(c => c.parent.type == 'measure' || c.id == '$$$_index_$$$').filter(c => !c.hide)
     } else {
       var columns =  this.columns.filter(c => c.id !== '$$$_index_$$$').filter(c => !c.hide)
     }
 
-    // update list with colspans
     columns = this.setColSpans(config, columns).filter(c => c.colspans[i] > 0)
 
     return columns
@@ -1383,14 +1354,12 @@ class LookerDataTable {
           cells[cell].rowspan = this.rowspan_values[row.id][cells[cell].id]
         } 
       }
-
       // filter out dimension cells that a hidden / merged into a cell above
       if (row.type === 'line_item') {
         cells = cells.filter(c => c.parent.type == 'measure' || this.rowspan_values[row.id][c.id] > 0)
       }
     }
 
-    console.log('getRow() returning cells:', cells)
     return cells
   }
 
