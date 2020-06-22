@@ -20,12 +20,26 @@ const lookerDataTableCoreOptions = {
     type: "string",
     display: "select",
     label: "Theme",
+    display_size: 'half',
     values: [
       { 'Traditional': 'traditional' },
       { 'Contemporary': 'contemporary' }
     ],
     default: "traditional",
     order: 100,
+  },
+  layout: {
+    section: "Table",
+    type: "string",
+    display: "select",
+    label: "Layout",
+    display_size: 'half',
+    values: [
+      { 'Even': 'fixed' },
+      { 'Auto': 'auto' }
+    ],
+    default: "traditional",
+    order: 101,
   },
   columnOrder: {},
   rowSubtotals: {
