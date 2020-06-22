@@ -15,6 +15,18 @@ const newArray = function(length, value) {
 }
 
 const lookerDataTableCoreOptions = {
+  theme: {
+    section: "Table",
+    type: "string",
+    display: "select",
+    label: "Theme",
+    values: [
+      { 'Traditional': 'traditional' },
+      { 'Contemporary': 'contemporary' }
+    ],
+    default: "traditional",
+    order: 100,
+  },
   columnOrder: {},
   rowSubtotals: {
     section: "Table",
@@ -689,6 +701,7 @@ class LookerDataTable {
           name: queryResponse.fields.supermeasure_like[s].name,
           view: '',
           label: queryResponse.fields.supermeasure_like[s].label,
+          value_format: queryResponse.fields.supermeasure_like[s].value_format,
           is_table_calculation: queryResponse.fields.supermeasure_like[s].is_table_calculation,
           calculation_type: queryResponse.fields.supermeasure_like[s].type,
           can_pivot: false,
