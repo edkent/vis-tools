@@ -189,8 +189,8 @@ class Row {
   constructor(type) {
     this.id = ''
     this.type = type
-    this.sort = [] // [total before|total after, subtotal group, row number]
-    this.data = {}
+    this.sort = [] // [ section, subtotal group, row number ]
+    this.data = {} // { value: any, rendered: string, html?: string, links?: array }
   }
 }
 
@@ -223,7 +223,6 @@ class Column {
     
     this.sort_by_measure_values = [] // [index -1|dimension 0|measure 1|row totals & supermeasures 2, column number, [measure values]  ]
     this.sort_by_pivot_values = []   // [index -1|dimension 0|measure 1|row totals & supermeasures 2, [pivot values], column number    ]
-    // this.sort_by_group_values = []  // [index -1|dimension 0| [header values], column number    ]
   }
 
   /**
@@ -930,6 +929,11 @@ class LookerDataTable {
 
   /**
    * Sorts the rows of data, then updates vertical cell merge 
+   * 
+   * Rows are sorted by three values:
+   * 1. Section
+   * 2. Subtotal Group
+   * 3. Row Value (currently based only on original row index from the Looker data object)
    */
   sortData () {
     var compareRowSortValues = (a, b) => {
@@ -945,7 +949,21 @@ class LookerDataTable {
   }
 
   /**
-   * Sorts columns by config option (based on measure order or pivot heading sort order)
+   * Sorts columns by config option
+   * 
+   * Depending on the colsSortBy option, columns are sorted by either:
+   * 
+   * Sort by Pivots (default)
+   * 1. Section: Index, Dimensions, Measures, or Supermeasures
+   * 2. Pivot sort values
+   * 3. Original column number for the Looker data obect [last item in sort value array]
+   * 
+   * Sort by Measures
+   * 1. Section: Index, Dimensions, Measures, or Supermeasures
+   * 2. Original Column Number
+   * 3. Measure sort values [remainder of sort value array]
+   * 
+   * Note that column sort values can be over-riden by manual drag'n'drop 
    */
   sortColumns () {
     var compareColSortValues = (a, b) => {
@@ -963,28 +981,40 @@ class LookerDataTable {
   /**
    * Generates subtotals values
    * 
-   * 1. Build groupings / sort values
+   * 1. Build array of subtotal groups
+   *    - Based on the joined values of each row's dimensions (up to the configured subtotal depth)
+   *    - Update each row's sort value with its subtotal group number
    * 2. Generate data rows
+   *    - For each subtotal group, create a new Row
+   *      - For each Column
+   *        - Set the style
+   *        - In the index dimension and the firstVisibleDimension, put the subtotal label
+   *        - If it's a measure 
+   *          - Count & total all rows of type 'line_item'
+   *          - Use total or average value based on calculation type
+   *          - Set as blank if it's a string type
+   *            // This is a gap in functionality. Ideally subtotal would replicate the logic that generated
+   *            // the string values in the line items.
    */
   addSubTotals () { 
     var depth = this.addSubtotalDepth
 
     // BUILD GROUPINGS / SORT VALUES
-    var subTotals = []
-    var latest_grouping = []
+    var subTotalGroups = []
+    var latest_group = []
     for (var r = 0; r < this.data.length; r++) {    
       var row = this.data[r]
       if (row.type !== 'total') {
-        var grouping = []
+        var group = []
         for (var g = 0; g < depth; g++) {
           var dim = this.dimensions[g].name
-          grouping.push(row.data[dim].value)
+          group.push(row.data[dim].value)
         }
-        if (grouping.join('|') !== latest_grouping.join('|')) {
-          subTotals.push(grouping)
-          latest_grouping = grouping
+        if (group.join('|') !== latest_group.join('|')) {
+          subTotalGroups.push(group)
+          latest_group = group
         }
-        row.sort = [0, subTotals.length-1, r]
+        row.sort = [0, subTotalGroups.length-1, r]
       }
     }
 
@@ -997,7 +1027,7 @@ class LookerDataTable {
     }
 
     // GENERATE DATA ROWS FOR SUBTOTALS
-    for (var s = 0; s < subTotals.length; s++) {
+    for (var s = 0; s < subTotalGroups.length; s++) {
       var subtotal = new Row('subtotal')
 
       for (var d = 0; d < this.columns.length; d++) {
@@ -1005,7 +1035,7 @@ class LookerDataTable {
         subtotal.data[column.id] = { 'cell_style': ['total'] } // set default
 
         if (column.id === '$$$_index_$$$' || column.id === firstVisibleDimension ) {
-          var subtotal_label = subTotals[s].join(' | ')
+          var subtotal_label = subTotalGroups[s].join(' | ')
           subtotal.data[column.id].value = subtotal_label
         } 
 
@@ -1057,7 +1087,12 @@ class LookerDataTable {
   }
 
   /**
-   * Generates new column subtotals, where 2 pivot levels have been used, or 1 pivot level sorted by measure values.
+   * Generates new column subtotals, where 2 pivot levels have been used
+   * // TODO: Could also have subtotals for 1 pivot tables sorted by measure
+   * 
+   * 1. Derive the new column definitions
+   * 2. Use the new definitions to add subtotal columns to table.columns
+   * 3. Calculate the column subtotal values
    */
   addColumnSubTotals () {
     var last_pivot_key = ''
@@ -1072,6 +1107,7 @@ class LookerDataTable {
     }
     pivots = [...new Set(pivots)]
 
+    // DERIVE THE NEW COLUMN DEFINITIONS
     for (var p = 0; p < pivots.length; p++) {
       var pivot = pivots[p]
       var highest_pivot_col = [0, '']
@@ -1119,7 +1155,7 @@ class LookerDataTable {
       }
     }
 
-    // UPDATE THIS.COLUMNS WITH NEW SUBTOTAL COLUMNS
+    // USE THE NEW DEFINITIONS TO ADD SUBTOTAL COLUMNS TO TABLE.COLUMNS
     for (var s = 0; s < subtotals.length; s++) {
       var subtotal = subtotals[s]
       var parent = this.measures[subtotal.measure_idx]
@@ -1143,7 +1179,7 @@ class LookerDataTable {
     }
     this.sortColumns()
 
-    // CALCULATE COLUMN SUB TOTALS
+    // CALCULATE COLUMN SUB TOTAL VALUES
     for  (var r = 0; r < this.data.length; r++) {
       var row = this.data[r]
       for (var s = 0; s < subtotals.length; s++) {
@@ -1167,6 +1203,7 @@ class LookerDataTable {
 
   /**
    * Variance calculation function to enable addVariance()
+   * @param {*} value_format 
    * @param {*} id 
    * @param {*} calc 
    * @param {*} baseline 
@@ -1333,6 +1370,10 @@ class LookerDataTable {
     return rendered
   }
 
+  /**
+   * Used to support rendering of table as vis. 
+   * Returns an array of 0s, of length to match the required number of header rows
+   */
   getLevels () {
     var num_levels =  this.pivot_fields.length + 1
     if (this.useHeadings && !this.has_pivots) { num_levels++ }
@@ -1437,6 +1478,7 @@ class LookerDataTable {
   }
 
   /**
+   * Used to support rendering of data table as vis. 
    * Builds list of columns out of data set that should be displayed
    * @param {*} i 
    */
@@ -1453,6 +1495,11 @@ class LookerDataTable {
     return columns
   }
 
+  /**
+   * Used to support rendering of data table as vis.
+   * For a given row of data, returns filtered array of cells – only those cells that are to be displayed.
+   * @param {*} row 
+   */
   getRow (row) {
     // filter out unwanted dimensions based on index_column setting
     if (this.useIndexColumn) {
@@ -1479,6 +1526,14 @@ class LookerDataTable {
     return cells
   }
 
+  /**
+   * Used to support column drag'n'drop when rendering data table as vis.
+   * Updates the table.config with the new pos values.
+   * Accepts a callback function for interaction with the vis.
+   * @param {*} from 
+   * @param {*} to 
+   * @param {*} callback 
+   */
   moveColumns(from, to, callback) {
     var config = this.config
     if (from != to) {
