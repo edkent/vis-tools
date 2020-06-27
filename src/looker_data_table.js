@@ -16,30 +16,29 @@ const newArray = function(length, value) {
 
 const lookerDataTableCoreOptions = {
   theme: {
-    section: "Table",
+    section: "Theme",
     type: "string",
     display: "select",
     label: "Theme",
-    display_size: 'half',
     values: [
       { 'Traditional': 'traditional' },
+      { 'Looker': 'looker' },
       { 'Contemporary': 'contemporary' }
     ],
     default: "traditional",
-    order: 100,
+    order: 1,
   },
   layout: {
-    section: "Table",
+    section: "Theme",
     type: "string",
     display: "select",
     label: "Layout",
-    display_size: 'half',
     values: [
       { 'Even': 'fixed' },
       { 'Auto': 'auto' }
     ],
     default: "traditional",
-    order: 101,
+    order: 2,
   },
   columnOrder: {},
   rowSubtotals: {
