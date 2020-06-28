@@ -123,11 +123,12 @@ const lookerDataTableCoreOptions = {
 }
 
 class ModelField {
-  constructor({ table, name, view, label, value_format = '', heading = '', short_name = '', unit = ''}) {
+  constructor({ table, name, view, label, is_numeric, value_format = '', heading = '', short_name = '', unit = ''}) {
     this.table = table
     this.name = name
     this.view = view
     this.label = label
+    this.is_numeric = is_numeric
     this.value_format = value_format
     this.heading = heading
     this.short_name = short_name
@@ -137,10 +138,10 @@ class ModelField {
 
 class ModelDimension extends ModelField {
   constructor({ 
-    table, name, view, label, 
+    table, name, view, label, is_numeric,
     value_format = '', heading = '', short_name = '', unit = ''
   }) {
-    super({ table, name, view, label, value_format, heading, short_name, unit })
+    super({ table, name, view, label, is_numeric, value_format, heading, short_name, unit })
 
     this.type = 'dimension'    
     this.align = 'left'
@@ -157,16 +158,17 @@ class ModelDimension extends ModelField {
 
 class ModelMeasure extends ModelDimension {
   constructor({ 
-    table, name, view, label, 
-    is_table_calculation, calculation_type, can_pivot,
+    table, name, view, label, is_numeric,
+    is_table_calculation, calculation_type, can_pivot, is_turtle = false,
     heading = '', short_name = '', unit = '', value_format = ''
   }) {
-    super({ table, name, view, label, value_format, heading, short_name, unit })
+    super({ table, name, view, label, is_numeric, value_format, heading, short_name, unit })
 
     this.type = 'measure'
     this.is_table_calculation = is_table_calculation
     this.calculation_type = calculation_type
     this.can_pivot = can_pivot
+    this.is_turtle = is_turtle
     this.align = 'right'
 
     if (typeof this.table.config['style|' + this.name] !== 'undefined') {
@@ -180,6 +182,70 @@ class ModelMeasure extends ModelDimension {
 }
 
 /**
+ * types: dimension | line_item | subtotal | total
+ */
+class Series {
+  constructor({ keys, values, types = [] }) {
+    if (keys.length === values.length ) {
+      this.keys = keys
+      this.values = values
+      this.types = []
+
+      var line_items_only = []
+      var with_subtotals = []
+      for (var i = 0; i < keys.length; i++) {
+        this.types[i] = typeof types[i] !== 'undefined' ? types[i] : 'line_item'
+        if (this.types[i] === 'line_item') {
+          line_items_only.push(this.values[i])
+          with_subtotals.push(this.values[i])
+        } else if (this.types[i] === 'subtotal') {
+          with_subtotals.push(this.values[i])
+        }
+      }
+
+      this.min_for_display = Math.min(with_subtotals)
+      this.max_for_display = Math.max(with_subtotals)
+      this.min = Math.min(line_items_only)
+      this.max = Math.max(line_items_only)
+      this.sum = line_items_only.reduce((a, b) => a + b, 0)
+      this.count = line_items_only.length
+      this.avg = line_items_only.length > 0 ? this.sum / line_items_only.length : null
+    } else {
+      console.log('Could not construct series, arrays were of different length.')
+    }
+  }
+}
+
+class CellSeries {
+  constructor({ column, row, sort_value, series}) {
+    this.column = column
+    this.row = row
+    this.sort_value = sort_value
+    this.series = new Series(series)
+  }
+
+  to_string() {
+    var rendered = ''
+    for (var i = 0; i < this.series.keys.length; i++) {
+      rendered += this.series.keys[i] + ':'
+      var formatted_value = this.column.parent.value_format === '' 
+                            ? this.series.values[i].toString() 
+                            : SSF.format(this.column.parent.value_format, this.series.values[i])
+      rendered += formatted_value + ' '
+    }
+    return rendered
+  }
+}
+
+class ColumnSeries{
+  constructor({ column, is_numeric, series }) {
+    this.column = column
+    this.is_numeric = is_numeric
+    this.series = new Series(series)
+  }
+}
+
+/**
  * Represents a row in the dataset that populates the table.
  * This may be an addtional row (e.g. subtotal) not in the original query
  * @class
@@ -187,9 +253,10 @@ class ModelMeasure extends ModelDimension {
 class Row {
   constructor(type) {
     this.id = ''
-    this.type = type
-    this.sort = [] // [ section, subtotal group, row number ]
-    this.data = {} // { value: any, rendered: string, html?: string, links?: array }
+    this.type = type  // line_item | subtotal | total
+    this.sort = []    // [ section, subtotal group, row number ]
+    this.data = {}    // Indexed by Column.id
+                      // { value: any, rendered: string, html?: string, links?: array }
   }
 }
 
@@ -338,6 +405,8 @@ class LookerDataTable {
     this.data = []
     this.pivot_fields = []
     this.pivot_values = []
+    this.variances = []
+    this.column_series = []
 
     this.rowspan_values = {}
 
@@ -357,8 +426,6 @@ class LookerDataTable {
     this.has_pivots = false
     this.has_supers = false
 
-    this.variances = []
-
     var col_idx = 0
     this.checkPivotsAndSupermeasures(queryResponse)
     this.checkVarianceCalculations()
@@ -376,6 +443,7 @@ class LookerDataTable {
     }
     this.addVarianceColumns()
     this.sortColumns()
+    this.addColumnSeries()
     this.applyFormatting()
 
     // TODO: more formatting options
@@ -586,7 +654,8 @@ class LookerDataTable {
         name: queryResponse.fields.dimension_like[d].name,
         type: 'dimension',
         view: queryResponse.fields.dimension_like[d].view_label || '',
-        label: queryResponse.fields.dimension_like[d].label_short || queryResponse.fields.dimension_like[d].label,       
+        label: queryResponse.fields.dimension_like[d].label_short || queryResponse.fields.dimension_like[d].label,
+        is_numeric: queryResponse.fields.dimension_like[d].is_numeric,
       })
       this.applyVisToolsTags(queryResponse.fields.dimension_like[d], dim)
       this.dimensions.push(dim)
@@ -623,9 +692,11 @@ class LookerDataTable {
         name: queryResponse.fields.measure_like[m].name,
         view: queryResponse.fields.measure_like[m].view_label || '',
         label: queryResponse.fields.measure_like[m].label_short || queryResponse.fields.measure_like[m].label,
+        is_numeric: queryResponse.fields.measure_like[m].is_numeric,
         value_format: queryResponse.fields.measure_like[m].value_format || '',
         is_table_calculation: typeof queryResponse.fields.measure_like[m].is_table_calculation !== 'undefined',
         can_pivot: true,
+        is_turtle: queryResponse.fields.measure_like[m].is_turtle,
         calculation_type: queryResponse.fields.measure_like[m].type,
       })
 
@@ -713,6 +784,7 @@ class LookerDataTable {
           name: queryResponse.fields.supermeasure_like[s].name,
           view: '',
           label: queryResponse.fields.supermeasure_like[s].label,
+          is_numeric: queryResponse.fields.supermeasure_like[m].is_numeric,
           value_format: queryResponse.fields.supermeasure_like[s].value_format,
           is_table_calculation: queryResponse.fields.supermeasure_like[s].is_table_calculation,
           calculation_type: queryResponse.fields.supermeasure_like[s].type,
@@ -766,6 +838,19 @@ class LookerDataTable {
           }
           if (row.data[column.id].value === null) {
             row.data[column.id].rendered = ''
+          }
+          if (column.parent.is_turtle) {
+            var cell_series = new CellSeries({
+              column: column,
+              row: row,
+              sort_value: row.data[column.id].sort_value,
+              series: {
+                keys: row.data[column.id]._parsed.keys,
+                values: row.data[column.id]._parsed.values
+              }
+            })
+            row.data[column.id].value = cell_series
+            row.data[column.id].rendered = cell_series.to_string()
           }
         }
       }
@@ -1344,6 +1429,33 @@ class LookerDataTable {
     
     variance_colpairs.forEach(colpair => {
       this.createVarianceColumn(colpair)
+    })
+  }
+
+  /**
+   * Generate data series to support transposition
+   */
+  addColumnSeries() {
+    this.columns.forEach(column => {
+      var keys = []
+      var values = []
+      var types = []
+
+      this.data.forEach(row => {
+        keys.push(row.id)
+        values.push(row.data[column.id].value)
+        types.push(row.type)
+      })
+      
+      this.column_series.push(new ColumnSeries({
+        column: column,
+        is_numeric: column.parent.is_numeric,
+        series: {
+          keys: keys,
+          values: values,
+          types: types
+        }
+      }))
     })
   }
 
