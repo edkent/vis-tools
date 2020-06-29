@@ -1,5 +1,7 @@
 import SSF from "ssf"
 
+const use_column_series = false
+
 /**
  * Returns an array of given length, all populated with same value
  * Convenience function e.g. to initialise arrays of zeroes or nulls
@@ -147,7 +149,7 @@ class ModelDimension extends ModelField {
     this.align = 'left'
 
     if (typeof this.table.config['hide|' + this.name] !== 'undefined') {
-      if (this.table.config['hide|' + this.name]) {
+      if (this.table.config['hide|' + this.name]) {ss
         this.hide = true
       } else {
         this.hide = false
@@ -443,7 +445,7 @@ class LookerDataTable {
     }
     this.addVarianceColumns()
     this.sortColumns()
-    this.addColumnSeries()
+    if (use_column_series) { this.addColumnSeries() }
     this.applyFormatting()
 
     // TODO: more formatting options
@@ -784,7 +786,7 @@ class LookerDataTable {
           name: queryResponse.fields.supermeasure_like[s].name,
           view: '',
           label: queryResponse.fields.supermeasure_like[s].label,
-          is_numeric: queryResponse.fields.supermeasure_like[m].is_numeric,
+          is_numeric: queryResponse.fields.supermeasure_like[s].is_numeric,
           value_format: queryResponse.fields.supermeasure_like[s].value_format,
           is_table_calculation: queryResponse.fields.supermeasure_like[s].is_table_calculation,
           calculation_type: queryResponse.fields.supermeasure_like[s].type,
@@ -1130,12 +1132,12 @@ class LookerDataTable {
             var cellKey = column.id
           }
 
-          var subtotal_value = this.data[0].data[cellKey].value // 0
+          var subtotal_value = 0
           var subtotal_items = 0
           var rendered = ''
-          for (var mr = 1; mr < this.data.length; mr++) { // var mr = 0
+          for (var mr = 0; mr < this.data.length; mr++) {
             var data_row = this.data[mr]
-            if (data_row.type == 'line_item' && data_row.sort[1] == s) {
+            if (data_row.type == 'line_item' && data_row.sort[1] == s) { // data_row.sort[1] == s checks whether its part of the subtotal group
               var value = data_row.data[cellKey].value
               if (Number.isFinite(value)) {
                 subtotal_value += value
