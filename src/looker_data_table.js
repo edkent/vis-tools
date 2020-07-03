@@ -1,6 +1,6 @@
 import SSF from "ssf"
 
-const use_column_series = false
+const use_column_series = true
 
 /**
  * Returns an array of given length, all populated with same value
@@ -156,7 +156,7 @@ class ModelDimension extends ModelField {
     this.align = 'left'
 
     if (typeof this.table.config['hide|' + this.name] !== 'undefined') {
-      if (this.table.config['hide|' + this.name]) {ss
+      if (this.table.config['hide|' + this.name]) {
         this.hide = true
       } else {
         this.hide = false
@@ -295,6 +295,8 @@ class Column {
     this.pivoted = false
     this.subtotal = false
     this.super = false
+
+    this.series = null
     
     this.sort_by_measure_values = [] // [index -1|dimension 0|measure 1|row totals & supermeasures 2, column number, [measure values]  ]
     this.sort_by_pivot_values = []   // [index -1|dimension 0|measure 1|row totals & supermeasures 2, [pivot values], column number    ]
@@ -442,6 +444,7 @@ class LookerDataTable {
     this.addMeasures(queryResponse, col_idx)
     this.buildIndexColumn(queryResponse)
     this.buildRows(lookerData)
+    if (use_column_series) { this.addColumnSeries() }
     this.buildTotals(queryResponse)
     this.updateRowSpanValues()
     if (this.config.rowSubtotals) {
@@ -451,8 +454,8 @@ class LookerDataTable {
       this.addColumnSubTotals()
     }
     this.addVarianceColumns()
+    // if (use_column_series) { this.addColumnSeries() }    // for new columns
     this.sortColumns()
-    if (use_column_series) { this.addColumnSeries() }
     this.applyFormatting()
     this.validateConfig()
 
@@ -880,52 +883,7 @@ class LookerDataTable {
     }
   }
 
-  buildTotals(queryResponse) {
-    if (typeof queryResponse.totals_data !== 'undefined') {
-      var totals_ = queryResponse.totals_data
 
-      var firstVisibleDimension = this.dimensions[0].name
-      for (var d = 0; d < this.dimensions.length; d++) {
-        if (!this.dimensions[d].hide) {
-          firstVisibleDimension = this.dimensions[d].name
-          break
-        }
-      }
-
-      var totals_row = new Row('total')
-
-      for (var c = 0; c < this.columns.length; c++) {
-        var column = this.columns[c]
-        totals_row.data[column.id] = { value: '', cell_style: ['total'] } // set a default on all columns
-        
-        if (column.parent.type == 'measure') {
-          if (column.pivoted == true) {
-            var cellKey = [column.pivot_key, column.parent.name].join('.')
-            var cellValue = totals_[column.parent.name][column.pivot_key]
-            cellValue.cell_style = ['total']
-            if (typeof cellValue.rendered == 'undefined' && typeof cellValue.html !== 'undefined' ){ // totals data may include html but not rendered value
-              cellValue.rendered = this.getRenderedFromHtml(cellValue)
-            }
-            totals_row.data[cellKey] = cellValue
-          } else {
-            var cellValue = totals_[column.id]
-            cellValue.cell_style = ['total']
-            if (typeof cellValue.rendered == 'undefined' && typeof cellValue.html !== 'undefined' ){ // totals data may include html but not rendered value
-              cellValue.rendered = this.getRenderedFromHtml(cellValue)
-            }
-            totals_row.data[column.id] = cellValue
-          }            
-          totals_row.data[column.id].cell_style = ['total']
-        }
-      } 
-      totals_row.data['$$$_index_$$$'].value = 'TOTAL'
-      totals_row.data[firstVisibleDimension].value = 'TOTAL' 
-      totals_row.sort = [1, 0, 0]
-
-      this.data.push(totals_row)
-      this.has_totals = true
-    }
-  }
 
   /**
    * Applies conditional formatting (red if negative) to all measure columns set to use it 
@@ -1363,12 +1321,12 @@ class LookerDataTable {
     }
 
     // TODO: Review sort values / algorithms
-    // if (baseline.sort_by_measure_values.length < column.sort_by_measure_values.length) {
-    //   baseline.sort_by_measure_values.push(0)
-    // }
-    // if (baseline.sort_by_pivot_values.length < column.sort_by_pivot_values.length) {
-    //   baseline.sort_by_pivot_values.push(0)
-    // }
+    if (baseline.sort_by_measure_values.length < column.sort_by_measure_values.length) {
+      baseline.sort_by_measure_values.push(0)
+    }
+    if (baseline.sort_by_pivot_values.length < column.sort_by_pivot_values.length) {
+      baseline.sort_by_pivot_values.push(0)
+    }
 
     if (typeof config.columnOrder[column.id] !== 'undefined') {
       column.pos = config.columnOrder[column.id]
@@ -1469,7 +1427,6 @@ class LookerDataTable {
                 }
               }
             })
-            console.log('top_level_pivots', top_level_pivots)
             top_level_pivots.slice(1).forEach((pivot_value, index) => {
               calcs.forEach(calc => {
                 variance_colpairs.push({
@@ -1507,8 +1464,8 @@ class LookerDataTable {
         values.push(row.data[column.id].value)
         types.push(row.type)
       })
-      
-      this.column_series.push(new ColumnSeries({
+
+      var new_series = new ColumnSeries({
         column: column,
         is_numeric: column.parent.is_numeric,
         series: {
@@ -1516,8 +1473,84 @@ class LookerDataTable {
           values: values,
           types: types
         }
-      }))
+      })
+      
+      column.series = new_series
+      this.column_series.push(new_series)
     })
+  }
+
+  buildTotals(queryResponse) {
+    if (typeof queryResponse.totals_data !== 'undefined') {
+      if (typeof queryResponse.truncated !== 'undefined') {
+        var calculate_others = true
+      } else {
+        var calculate_others = false
+      }
+
+      var totals_ = queryResponse.totals_data
+
+      var firstVisibleDimension = this.dimensions[0].name
+      for (var d = 0; d < this.dimensions.length; d++) {
+        if (!this.dimensions[d].hide) {
+          firstVisibleDimension = this.dimensions[d].name
+          break
+        }
+      }
+
+      var totals_row = new Row('total')
+      var others_row = new Row('line_item')
+
+      for (var c = 0; c < this.columns.length; c++) {
+        var column = this.columns[c]
+        var other_value = null
+        totals_row.data[column.id] = { value: '', cell_style: ['total'] } // set a default on all columns
+        others_row.data[column.id] = { value: '', cell_style: [] } // set a default on all columns
+        
+        if (column.parent.type == 'measure') {
+          if (column.pivoted == true) {
+            var cellValue = totals_[column.parent.name][column.pivot_key]       
+          } else {
+            var cellValue = totals_[column.id]  
+          }
+          if (typeof cellValue.rendered == 'undefined' && typeof cellValue.html !== 'undefined' ){ // totals data may include html but not rendered value
+            cellValue.rendered = this.getRenderedFromHtml(cellValue)
+          }
+          if (calculate_others) {
+            if (['sum', 'count_distinct', 'count'].includes(column.parent.calculation_type)) {
+              other_value = cellValue.value - column.series.series.sum
+            } else if (column.parent.calculation_type === 'average') {
+              other_value = (cellValue.value + column.series.series.avg) / 2
+            }  
+          }
+          cellValue.cell_style = ['total']
+          totals_row.data[column.id] = cellValue
+
+          if (calculate_others && other_value) {
+            var formatted_value = column.parent.value_format === '' 
+                  ? other_value.toString() 
+                  : SSF.format(column.parent.value_format, other_value)
+                  others_row.data[column.id] = { value: other_value, rendered: formatted_value } 
+          }
+                    
+        }
+      } 
+      totals_row.data['$$$_index_$$$'].value = 'TOTAL'
+      totals_row.data[firstVisibleDimension].value = 'TOTAL' 
+      totals_row.sort = [1, 0, 0]
+
+      if (calculate_others) {
+        others_row.data['$$$_index_$$$'].value = 'Others'
+        others_row.data[firstVisibleDimension].value = 'Others'
+        others_row.sort = [1, -1, -1] 
+      }
+      
+      this.data.push(totals_row)
+      calculate_others && this.data.push(others_row)
+
+      this.has_totals = true
+      this.sortData()
+    }
   }
 
   /**
@@ -1732,7 +1765,7 @@ class LookerDataTable {
   }
 
   validateConfig() {
-    if (!['traditional', 'looker', 'contemporary'].includes(this.config.layout)) {
+    if (!['traditional', 'looker', 'contemporary'].includes(this.config.theme)) {
       this.config.theme = 'traditional'
     }
 
