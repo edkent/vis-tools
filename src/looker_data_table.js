@@ -524,10 +524,6 @@ class LookerDataTable {
 
       var comparisonOptions = []
       
-      // TODO: pivoted measures (i.e. PoP for the same measure)
-      //    Assuming it's easier in first version for modelled measures rather than users
-      //    knowing the pivot pattern
-      //
       if (this.measures[i].can_pivot) {
         var pivotComparisons = []
         for (var p = 0; p < this.pivot_fields.length; p++) {
@@ -1392,6 +1388,12 @@ class LookerDataTable {
 
   /**
    * Function to add variance columns directly within table vis rather than requiring a table calc
+   * 
+   * Takes list of variances configured by the user, and generates a list of column-pairs necessary
+   * to calculate those variances. There is at least one baseline-comparison pair per variance.
+   * Comparing different measures in a pivoted table will calculate a variance pair per pivot value.
+   * Comparing the same measure across pivots will calculate one pair less than there are pivots e.g.
+   * if comparing this year to last year, there are two "Reporting Period" values but only one variance.
    */
   addVarianceColumns () {
     var variance_colpairs = []
@@ -1413,24 +1415,66 @@ class LookerDataTable {
               if (!pivot_value.is_total) {
                 calcs.forEach(calc => {
                   variance_colpairs.push({
+                    calc: calc,
                     variance: {
                       baseline: [pivot_value.key, variance.baseline].join('.'),
                       comparison: [pivot_value.key, variance.comparison].join('.'),
                       reverse: variance.reverse,
                       type: variance.type
-                    },
-                    calc: calc
+                    }
                   })
                 })
               }
             })
           }
-        } else if (variance.type === 'by_pivot') { // TODO: Variance across pivot columns not yet implemented
-          // by_pivot
+        } else if (variance.type === 'by_pivot') { 
+          if (variance.baseline === this.pivot_fields[1]) { // bottom pivot value - variance by pivot key
+            this.pivot_values.slice(1).forEach((pivot_value, index) => {
+              calcs.forEach(calc => {
+                if (!pivot_value.is_total) {
+                  variance_colpairs.push({
+                    calc: calc,
+                    variance: {
+                      baseline: [pivot_value.key, variance.baseline].join('.'),
+                      comparison: [this.pivot_values[index].key, variance.baseline].join('.'),
+                      reverse: variance.reverse,
+                      type: variance.type
+                    }
+                  })
+                }
+              })
+            })
+          } else { // top pivot value - variance by subtotal
+            var top_level_pivots = []
+            this.pivot_values.forEach(pivot_value => {
+              if (!pivot_value.is_total) {
+                var value = pivot_value.data[this.pivot_fields[0]]
+                if (!top_level_pivots.includes(value)) {
+                  top_level_pivots.push(value)
+                }
+              }
+            })
+            console.log('top_level_pivots', top_level_pivots)
+            top_level_pivots.slice(1).forEach((pivot_value, index) => {
+              calcs.forEach(calc => {
+                variance_colpairs.push({
+                  calc: calc,
+                  variance: {
+                    baseline: ['$$$_subtotal_$$$', pivot_value, variance.baseline].join('.'),
+                    comparison: ['$$$_subtotal_$$$', top_level_pivots[index], variance.baseline].join('.'),
+                    reverse: variance.reverse,
+                    type: variance.type
+                  }
+                })
+              })
+            })
+          } 
         }
       }
     })
     
+    console.log('variance_colpairs:', variance_colpairs)
+
     variance_colpairs.forEach(colpair => {
       this.createVarianceColumn(colpair)
     })
