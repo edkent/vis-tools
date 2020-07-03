@@ -39,7 +39,7 @@ const lookerDataTableCoreOptions = {
       { 'Even': 'fixed' },
       { 'Auto': 'auto' }
     ],
-    default: "traditional",
+    default: "fixed",
     order: 2,
   },
   columnOrder: {},
@@ -447,6 +447,7 @@ class LookerDataTable {
     this.sortColumns()
     if (use_column_series) { this.addColumnSeries() }
     this.applyFormatting()
+    this.validateConfig()
 
     // TODO: more formatting options
     // addSpacerColumns
@@ -1391,7 +1392,6 @@ class LookerDataTable {
    * Function to add variance columns directly within table vis rather than requiring a table calc
    */
   addVarianceColumns () {
-    var config = this.config
     var variance_colpairs = []
     var calcs = ['absolute', 'percent']
     
@@ -1406,7 +1406,7 @@ class LookerDataTable {
                 calc: calc
               })
             })
-          } else { // variance.type === 'by_pivot'
+          } else {
             this.pivot_values.forEach(pivot_value => {
               if (!pivot_value.is_total) {
                 calcs.forEach(calc => {
@@ -1423,7 +1423,7 @@ class LookerDataTable {
               }
             })
           }
-        } else { // TODO: Variance across pivot columns not yet implemented
+        } else if (variance.type === 'by_pivot') { // TODO: Variance across pivot columns not yet implemented
           // by_pivot
         }
       }
@@ -1669,6 +1669,16 @@ class LookerDataTable {
         } 
       }
       callback(col_order)
+    }
+  }
+
+  validateConfig() {
+    if (!['traditional', 'looker', 'contemporary'].includes(this.config.layout)) {
+      this.config.theme = 'traditional'
+    }
+
+    if (!['fixed', 'auto'].includes(this.config.layout)) {
+      this.config.layout = 'fixed'
     }
   }
 
