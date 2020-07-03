@@ -528,15 +528,17 @@ class LookerDataTable {
       //    Assuming it's easier in first version for modelled measures rather than users
       //    knowing the pivot pattern
       //
-      // if (this.measures[i].can_pivot) {
-      //   var pivotComparisons = []
-      //   for (var p = 0; p < this.pivot_fields.length; p++) {
-      //     var option = {}
-      //     option['By ' + this.pivot_fields[p]] = this.pivot_fields[p]
-      //     pivotComparisons.push(option)
-      //   }
-      //   comparisonOptions = comparisonOptions.concat(pivotComparisons)
-      // }
+      if (this.measures[i].can_pivot) {
+        var pivotComparisons = []
+        for (var p = 0; p < this.pivot_fields.length; p++) {
+          if (p === 0 || this.config.colSubtotals ) {
+            var option = {}
+            option['By ' + this.pivot_fields[p]] = this.pivot_fields[p]
+            pivotComparisons.push(option)
+          }
+        }
+        comparisonOptions = comparisonOptions.concat(pivotComparisons)
+      }
 
       // measures, row totals and supermeasures
       for (var j = 0; j < this.measures.length; j++) {
