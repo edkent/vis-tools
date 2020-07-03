@@ -115,6 +115,13 @@ const lookerDataTableCoreOptions = {
     default: "false",
     order: 9,
   },
+  groupVarianceColumns: {
+    section: "Table",
+    type: "boolean",
+    label: "Group Variance Columns After Pivots",
+    default: "false",
+    order: 10,
+  },
   indexColumn: {
     section: "Dimensions",
     type: "boolean",
@@ -1355,15 +1362,12 @@ class LookerDataTable {
       column.hide = !config['var_pct|' + baseline.parent.name]
     }
 
-    if (baseline.sort_by_measure_values.length < column.sort_by_measure_values.length) {
-      baseline.sort_by_measure_values.push(0)
-    }
-    if (baseline.sort_by_pivot_values.length < column.sort_by_pivot_values.length) {
-      baseline.sort_by_pivot_values.push(0)
-    }
-    // idea to test when vs_pivot variance is added
-    // if (config.sortColumnsBy === 'getSortByPivots') {
-    //   column.sort_by_pivot_values[0] = 1.5
+    // TODO: Review sort values / algorithms
+    // if (baseline.sort_by_measure_values.length < column.sort_by_measure_values.length) {
+    //   baseline.sort_by_measure_values.push(0)
+    // }
+    // if (baseline.sort_by_pivot_values.length < column.sort_by_pivot_values.length) {
+    //   baseline.sort_by_pivot_values.push(0)
     // }
 
     if (typeof config.columnOrder[column.id] !== 'undefined') {
@@ -1375,8 +1379,19 @@ class LookerDataTable {
     }
     column.pivoted = baseline.pivoted
     column.super = baseline.super
-    column.levels = baseline.levels
     column.pivot_key = ''
+
+    column.levels = baseline.levels
+    if (config.groupVarianceColumns) {
+      if (config.sortColumnsBy === 'getSortByPivots') {
+        column.sort_by_pivot_values[0] = 1.5
+      }
+      if (baseline.levels.length === 1) {
+        column.levels = ['Variance']
+      } else {
+        column.levels = ['Variance', baseline.levels[1]]
+      }
+    }
 
     this.columns.push(column)
     if (colpair.variance.reverse) {
@@ -1428,7 +1443,7 @@ class LookerDataTable {
             })
           }
         } else if (variance.type === 'by_pivot') { 
-          if (variance.baseline === this.pivot_fields[1]) { // bottom pivot value - variance by pivot key
+          if (this.pivot_fields.length === 1 || this.pivot_fields[1] === variance.comparison) {
             this.pivot_values.slice(1).forEach((pivot_value, index) => {
               calcs.forEach(calc => {
                 if (!pivot_value.is_total) {
@@ -1472,8 +1487,6 @@ class LookerDataTable {
         }
       }
     })
-    
-    console.log('variance_colpairs:', variance_colpairs)
 
     variance_colpairs.forEach(colpair => {
       this.createVarianceColumn(colpair)
