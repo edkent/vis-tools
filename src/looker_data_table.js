@@ -426,6 +426,7 @@ class LookerDataTable {
     this.transposed_data = []
 
     this.pivot_fields = []
+    this.pivots = []
     this.pivot_values = []
     this.variances = []
     this.column_series = []
@@ -609,6 +610,7 @@ class LookerDataTable {
     for (var p = 0; p < queryResponse.fields.pivots.length; p++) { 
       var name = queryResponse.fields.pivots[p].name
       this.pivot_fields.push(name) 
+      this.pivots.push(queryResponse.fields.pivots[p])
     }
 
     if (typeof queryResponse.pivots !== 'undefined') {
@@ -1595,8 +1597,13 @@ class LookerDataTable {
   transposeColumns () {
     this.transposed_columns = []
     var default_colspan = newArray(this.dimensions.length, 1)
-    var dummy_parent = {
+    var index_parent = {
       align: 'left',
+      type: 'measure',
+      is_table_calculation: false
+    }
+    var measure_parent = {
+      align: 'right',
       type: 'measure',
       is_table_calculation: false
     }
@@ -1605,8 +1612,8 @@ class LookerDataTable {
       this.transposed_columns.push({
         id: 'header',
         getLabel: (i) => i === 0 ? 'Header' : '',
-        colspan: default_colspan,
-        parent: dummy_parent,
+        colspans: default_colspan,
+        parent: index_parent,
         type: 'measure',
         is_table_calculation: false
       })
@@ -1614,12 +1621,12 @@ class LookerDataTable {
 
     if (this.sortColsBy === 'getSortByPivots') {
       console.log('pivot fields first')
-      this.pivot_fields.forEach(pivot_field => {
+      this.pivots.forEach(pivot => {
         this.transposed_columns.push({
-          id: pivot_field,
-          colspan: default_colspan,
-          parent: dummy_parent,
-          getLabel: (i) => i === 0 ? pivot_field : '',
+          id: pivot.name,
+          colspans: default_colspan,
+          parent: index_parent,
+          getLabel: (i) => i === 0 ? pivot.label_short : '',
           type: 'dimension',
           align: 'left',
           is_table_calculation: false
@@ -1627,8 +1634,8 @@ class LookerDataTable {
       })
       this.transposed_columns.push({
         id: 'measure',
-        colspan: default_colspan,
-        parent: dummy_parent,
+        colspans: default_colspan,
+        parent: index_parent,
         getLabel: (i) => i === 0 ? 'Measure' : '',
         type: 'measure',
         align: 'left',
@@ -1638,19 +1645,19 @@ class LookerDataTable {
       console.log('measure names first')
       this.transposed_columns.push({
         id: 'measure',
-        colspan: default_colspan,
-        parent: dummy_parent,
+        colspans: default_colspan,
+        parent: index_parent,
         getLabel: (i) => i === 0 ? 'Measure' : '',
         type: 'measure',
         align: 'left',
         is_table_calculation: false
       })
-      this.pivot_fields.forEach(pivot_field => {
+      this.pivots.forEach(pivot => {
         this.transposed_columns.push({
-          id: pivot_field,
-          colspan: default_colspan,
-          parent: dummy_parent,
-          getLabel: (i) => i === 0 ? pivot_field : '',
+          id: pivot.name,
+          colspans: default_colspan,
+          parent: index_parent,
+          getLabel: (i) => i === 0 ? pivot.label_short : '',
           type: 'dimension',
           align: 'left',
           is_table_calculation: false
@@ -1667,15 +1674,18 @@ class LookerDataTable {
           colspan.push(this.rowspan_values[sourceRow.id][dim.name])
           labels.push(sourceRow.data[dim.name].value)
         })
-      } else {
+      } else if (sourceRow.type === 'subtotal') {
         var colspan = default_colspan
-        var labels = ['TOTALS TBD'].concat(newArray(this.dimensions.length-1, ''))
+        var labels = ['Subtotal'].concat(newArray(this.dimensions.length-1, ''))
+      } else if (sourceRow.type === 'total') {
+        var colspan = default_colspan
+        var labels = ['TOTAL'].concat(newArray(this.dimensions.length-1, ''))
       }
 
       this.transposed_columns.push({
         id: sourceRow.id,
-        colspan: colspan,
-        parent: dummy_parent,
+        colspans: colspan,
+        parent: measure_parent,
         labels: labels,
         align: 'right',
         is_table_calculation: false
@@ -1812,7 +1822,8 @@ class LookerDataTable {
       return columns
 
     } else {
-      return this.transposed_columns
+      // return this.transposed_columns
+      return this.transposed_columns.filter(c => c.colspans[i] > 0)
     }
 
   }
@@ -1821,17 +1832,12 @@ class LookerDataTable {
     if (!this.transposeTable) {
       return this.data
     } else {
-      console.log('getDataRows transposed =====')
-      console.log('current table', this)
-
-      // for each column id, go throught the original data rows and build a transposed array of rows
-      // each row will have: header, pivot_values, measure, data points
-      // data point will be indexed by... 
       this.columns.filter(c => c.parent.type === 'measure').forEach(column => {
         var transposed_data = {}
         this.data.forEach(row => {
           if (typeof row.data[column.id] !== 'undefined') {
             transposed_data[row.id] = row.data[column.id]
+            transposed_data[row.id]['align'] = 'right'
           } else {
             console.log('row data does not exist for', column.id)
           }
@@ -1846,7 +1852,6 @@ class LookerDataTable {
         this.pivot_fields.forEach((pivot_field, idx) => {
           transposed_data[pivot_field] = { value: column.levels[idx] }
         })
-        console.log('get pivot values from this: column:', column)
         var transposed_row = {
           id: column.id,
           hide: column.hide,
