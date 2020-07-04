@@ -129,6 +129,13 @@ const lookerDataTableCoreOptions = {
     default: "false",
     order: 0,
   },
+  tranposeTable: {
+    section: "Table",
+    type: "boolean",
+    label: "Transpose",
+    default: "false",
+    order: 100,
+  },
 }
 
 class ModelField {
@@ -307,12 +314,12 @@ class Column {
    * @param {*} label_with_view - full field name including label e.g. "Users Name"
    * @param {*} label_with_pivots - adds all pivot values "Total Users Q1 Male"
    */
-  getLabel (params) {
-    var defaultParams = {
-      hasPivots: false,
-      level: 0,
-    }
-    params = Object.assign(defaultParams, params)
+  getLabel (level) {
+    // var defaultParams = {
+    //   hasPivots: false,
+    //   level: 0,
+    // }
+    // params = Object.assign(defaultParams, params)
 
     switch (this.variance_type) {
       case 'absolute':
@@ -340,20 +347,20 @@ class Column {
       //   label = [label, pivots].join(' ') 
       // }
       if (this.table.sortColsBy === 'getSortByPivots') {
-        if (params.level < this.levels.length) {
-          label = this.levels[params.level]
+        if (level < this.levels.length) {
+          label = this.levels[level]
         } else {
           // label already set
         }
       } else { // params.config.sortColumnsBy === 'getSortByMeasures'
-        if (params.level >= 1) {
-          label = this.levels[params.level - 1]
+        if (level >= 1) {
+          label = this.levels[level - 1]
         } else {
           // label already set
         }
       } 
     } else { // flat table
-      if (this.table.useHeadings && params.level === 0) {
+      if (this.table.useHeadings && level === 0) {
         var key = 'heading|' + this.parent.name
         if (typeof this.table.config[key] !== 'undefined') {
           label = this.table.config[key] ? this.table.config[key] : this.parent.heading
@@ -410,10 +417,14 @@ class LookerDataTable {
   constructor(lookerData, queryResponse, config) {
     this.config = config
 
-    this.columns = []
     this.dimensions = []
     this.measures = []
+    this.columns = []
     this.data = []
+
+    this.transposed_columns = []
+    this.transposed_data = []
+
     this.pivot_fields = []
     this.pivot_values = []
     this.variances = []
@@ -437,6 +448,8 @@ class LookerDataTable {
     this.has_pivots = false
     this.has_supers = false
 
+    this.transposeTable = config.tranposeTable
+
     var col_idx = 0
     this.checkPivotsAndSupermeasures(queryResponse)
     this.checkVarianceCalculations()
@@ -447,16 +460,13 @@ class LookerDataTable {
     if (use_column_series) { this.addColumnSeries() }
     this.buildTotals(queryResponse)
     this.updateRowSpanValues()
-    if (this.config.rowSubtotals) {
-      this.addSubTotals(config.subtotalDepth)
-    }
-    if (this.config.colSubtotals && this.pivot_fields.length == 2) {
-      this.addColumnSubTotals()
-    }
+    if (this.config.rowSubtotals) { this.addSubTotals(config.subtotalDepth) }
+    if (this.config.colSubtotals && this.pivot_fields.length == 2) { this.addColumnSubTotals() }
     this.addVarianceColumns()
     // if (use_column_series) { this.addColumnSeries() }    // for new columns
     this.sortColumns()
     this.applyFormatting()
+    if (this.transposeTable) { this.transposeColumns() }
     this.validateConfig()
 
     // TODO: more formatting options
@@ -883,8 +893,6 @@ class LookerDataTable {
     }
   }
 
-
-
   /**
    * Applies conditional formatting (red if negative) to all measure columns set to use it 
    */
@@ -1079,6 +1087,7 @@ class LookerDataTable {
     // GENERATE DATA ROWS FOR SUBTOTALS
     for (var s = 0; s < subTotalGroups.length; s++) {
       var subtotal = new Row('subtotal')
+      subtotal.id = 'Subtotal|' + subTotalGroups[s].join('|')
 
       for (var d = 0; d < this.columns.length; d++) {
         var column = this.columns[d]
@@ -1504,6 +1513,8 @@ class LookerDataTable {
       for (var c = 0; c < this.columns.length; c++) {
         var column = this.columns[c]
         var other_value = null
+        totals_row.id = 'Total'
+        others_row.id = 'Others'
         totals_row.data[column.id] = { value: '', cell_style: ['total'] } // set a default on all columns
         others_row.data[column.id] = { value: '', cell_style: [] } // set a default on all columns
         
@@ -1576,14 +1587,115 @@ class LookerDataTable {
   }
 
   /**
+   * For rendering a transposed table i.e. with the list of measures on the left hand side
+   * 1. If used, add the 'header' column
+   * 2. Depending on column sort order, add pivot fields then a measure column (or vice versa) 
+   * 3. Add a transposed column for every data row
+   */
+  transposeColumns () {
+    this.transposed_columns = []
+    var default_colspan = newArray(this.dimensions.length, 1)
+    var dummy_parent = {
+      align: 'left',
+      type: 'measure',
+      is_table_calculation: false
+    }
+
+    if (this.useHeadings && !this.has_pivots) {
+      this.transposed_columns.push({
+        id: 'header',
+        getLabel: (i) => i === 0 ? 'Header' : '',
+        colspan: default_colspan,
+        parent: dummy_parent,
+        type: 'measure',
+        is_table_calculation: false
+      })
+    }
+
+    if (this.sortColsBy === 'getSortByPivots') {
+      console.log('pivot fields first')
+      this.pivot_fields.forEach(pivot_field => {
+        this.transposed_columns.push({
+          id: pivot_field,
+          colspan: default_colspan,
+          parent: dummy_parent,
+          getLabel: (i) => i === 0 ? pivot_field : '',
+          type: 'dimension',
+          align: 'left',
+          is_table_calculation: false
+        })
+      })
+      this.transposed_columns.push({
+        id: 'measure',
+        colspan: default_colspan,
+        parent: dummy_parent,
+        getLabel: (i) => i === 0 ? 'Measure' : '',
+        type: 'measure',
+        align: 'left',
+        is_table_calculation: false
+      })
+    } else {
+      console.log('measure names first')
+      this.transposed_columns.push({
+        id: 'measure',
+        colspan: default_colspan,
+        parent: dummy_parent,
+        getLabel: (i) => i === 0 ? 'Measure' : '',
+        type: 'measure',
+        align: 'left',
+        is_table_calculation: false
+      })
+      this.pivot_fields.forEach(pivot_field => {
+        this.transposed_columns.push({
+          id: pivot_field,
+          colspan: default_colspan,
+          parent: dummy_parent,
+          getLabel: (i) => i === 0 ? pivot_field : '',
+          type: 'dimension',
+          align: 'left',
+          is_table_calculation: false
+        })
+      })
+    }
+    
+    for (var h = 0; h < this.data.length; h++) {
+      var sourceRow = this.data[h]
+      if (sourceRow.type === 'line_item') {
+        var colspan = []
+        var labels = []
+        this.dimensions.forEach(dim => {
+          colspan.push(this.rowspan_values[sourceRow.id][dim.name])
+          labels.push(sourceRow.data[dim.name].value)
+        })
+      } else {
+        var colspan = default_colspan
+        var labels = ['TOTALS TBD'].concat(newArray(this.dimensions.length-1, ''))
+      }
+
+      this.transposed_columns.push({
+        id: sourceRow.id,
+        colspan: colspan,
+        parent: dummy_parent,
+        labels: labels,
+        align: 'right',
+        is_table_calculation: false
+      })
+    }
+    console.log('transposed columns', this.transposed_columns)
+  }
+
+  /**
    * Used to support rendering of table as vis. 
    * Returns an array of 0s, of length to match the required number of header rows
    */
   getLevels () {
-    var num_levels =  this.pivot_fields.length + 1
-    if (this.useHeadings && !this.has_pivots) { num_levels++ }
-    
-    return newArray(num_levels, 0)
+    if (!this.transposeTable) {
+      var num_levels =  this.pivot_fields.length + 1
+      if (this.useHeadings && !this.has_pivots) { num_levels++ }      
+      return newArray(num_levels, 0)
+    } else {
+      return this.dimensions
+    }
   }
 
   /**
@@ -1687,17 +1799,66 @@ class LookerDataTable {
    * Builds list of columns out of data set that should be displayed
    * @param {*} i 
    */
-  getColumnsToDisplay (i) {
-    var config = this.config
-    if (this.useIndexColumn) {
-      var columns = this.columns.filter(c => c.parent.type == 'measure' || c.id == '$$$_index_$$$').filter(c => !c.hide)
+  getTableHeaders (i) {
+    if (!this.transposeTable) {
+      if (this.useIndexColumn) {
+        var columns = this.columns.filter(c => c.parent.type == 'measure' || c.id == '$$$_index_$$$').filter(c => !c.hide)
+      } else {
+        var columns =  this.columns.filter(c => c.id !== '$$$_index_$$$').filter(c => !c.hide)
+      }
+
+      columns = this.setColSpans(columns).filter(c => c.colspans[i] > 0)
+
+      return columns
+
     } else {
-      var columns =  this.columns.filter(c => c.id !== '$$$_index_$$$').filter(c => !c.hide)
+      return this.transposed_columns
     }
 
-    columns = this.setColSpans(columns).filter(c => c.colspans[i] > 0)
+  }
 
-    return columns
+  getDataRows () {
+    if (!this.transposeTable) {
+      return this.data
+    } else {
+      console.log('getDataRows transposed =====')
+      console.log('current table', this)
+
+      // for each column id, go throught the original data rows and build a transposed array of rows
+      // each row will have: header, pivot_values, measure, data points
+      // data point will be indexed by... 
+      this.columns.filter(c => c.parent.type === 'measure').forEach(column => {
+        var transposed_data = {}
+        this.data.forEach(row => {
+          if (typeof row.data[column.id] !== 'undefined') {
+            transposed_data[row.id] = row.data[column.id]
+          } else {
+            console.log('row data does not exist for', column.id)
+          }
+        })
+        transposed_data.header = {value: 'Header TBD'}
+        if (this.sortColsBy === 'getSortByPivots') {
+          var measure_label = column.getLabel(1)
+        } else {
+          var measure_label = column.getLabel(0)
+        }
+        transposed_data.measure = {value: measure_label}
+        this.pivot_fields.forEach((pivot_field, idx) => {
+          transposed_data[pivot_field] = { value: column.levels[idx] }
+        })
+        console.log('get pivot values from this: column:', column)
+        var transposed_row = {
+          id: column.id,
+          hide: column.hide,
+          data: transposed_data
+        }
+
+        this.transposed_data.push(transposed_row)
+      })
+      console.log('transposed rows', this.transposed_data)
+
+      return this.transposed_data.filter(row => !row.hide)
+    }
   }
 
   /**
@@ -1705,30 +1866,34 @@ class LookerDataTable {
    * For a given row of data, returns filtered array of cells – only those cells that are to be displayed.
    * @param {*} row 
    */
-  getRow (row) {
-    // filter out unwanted dimensions based on index_column setting
-    if (this.useIndexColumn) {
-      var cells = this.columns.filter(c => c.parent.type == 'measure' || c.id == '$$$_index_$$$').filter(c => !c.hide)
+  getTableColumns (row) {
+    if (!this.transposeTable) {
+      // filter out unwanted dimensions based on index_column setting
+      if (this.useIndexColumn) {
+        var cells = this.columns.filter(c => c.parent.type == 'measure' || c.id == '$$$_index_$$$').filter(c => !c.hide)
+      } else {
+        var cells =  this.columns.filter(c => c.id !== '$$$_index_$$$').filter(c => !c.hide)
+      }
+      
+      // if we're using all dimensions, and we've got span_rows on, need to update the row
+      if (!this.useIndexColumn && this.spanRows) {
+      // set row spans, for dimension cells that should appear
+        for (var cell = 0; cell < cells.length; cell++) {
+          cells[cell].rowspan = 1 // set default
+          if (row.type === 'line_item' && this.rowspan_values[row.id][cells[cell].id] > 0) {
+            cells[cell].rowspan = this.rowspan_values[row.id][cells[cell].id]
+          } 
+        }
+        // filter out dimension cells that a hidden / merged into a cell above
+        if (row.type === 'line_item') {
+          cells = cells.filter(c => c.parent.type == 'measure' || this.rowspan_values[row.id][c.id] > 0)
+        }
+      }
+      return cells
     } else {
-      var cells =  this.columns.filter(c => c.id !== '$$$_index_$$$').filter(c => !c.hide)
+      return this.transposed_columns
     }
     
-    // if we're using all dimensions, and we've got span_rows on, need to update the row
-    if (!this.useIndexColumn && this.spanRows) {
-    // set row spans, for dimension cells that should appear
-      for (var cell = 0; cell < cells.length; cell++) {
-        cells[cell].rowspan = 1 // set default
-        if (row.type === 'line_item' && this.rowspan_values[row.id][cells[cell].id] > 0) {
-          cells[cell].rowspan = this.rowspan_values[row.id][cells[cell].id]
-        } 
-      }
-      // filter out dimension cells that a hidden / merged into a cell above
-      if (row.type === 'line_item') {
-        cells = cells.filter(c => c.parent.type == 'measure' || this.rowspan_values[row.id][c.id] > 0)
-      }
-    }
-
-    return cells
   }
 
   /**
