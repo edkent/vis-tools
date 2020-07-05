@@ -284,6 +284,7 @@ class ColumnSeries{
 class Row {
   constructor(type) {
     this.id = ''
+    this.parent = null
     this.type = type  // line_item | subtotal | total
     this.sort = []    // [ section, subtotal group, row number ]
     this.data = {}    // Indexed by Column.id
@@ -311,6 +312,7 @@ class Column {
     this.pos = 0
     this.levels = []
     this.pivot_key = '' 
+    this.colspans = []
 
     this.unit = parent.unit || ''
     this.hide = parent.hide || false
@@ -493,6 +495,7 @@ class LookerDataTable {
     }
     this.validateConfig()
     this.getTableColumnGroups() // during testing only .. this function will be called by vis code
+    // this.validateTable()
 
     // TODO: more formatting options
     // addSpacerColumns
@@ -502,6 +505,56 @@ class LookerDataTable {
 
   static getCoreConfigOptions() {
     return lookerDataTableCoreOptions
+  }
+
+  validateTable() {
+    var headers = this.getLevels()
+    console.log('# Headers:', headers.length)
+    headers.forEach((header, idx) => {
+      console.log('   level', idx, header)
+    })
+
+    // standard
+    console.log('VALIDATE SIZE – STANDARD')
+    
+    var index_columns = this.useIndexColumn ? ['$$$_index_$$$'] : this.dimensions
+    var measures_columns = this.columns.filter(c => c.parent.type === 'measure').filter(c => !c.super)
+    var totals_columns = this.columns.filter(c => c.parent.type === 'measure').filter(c => c.super)
+    var number_of_columns = index_columns.length + measures_columns.length + totals_columns.length
+    console.log('# Columns:', number_of_columns)
+    console.log('    # Index', index_columns.length)
+    console.log('    # Measures', measures_columns.length)
+    console.log('    # Totals', totals_columns.length)
+    console.log('index', index_columns)
+    console.log('measures', measures_columns)
+    console.log('totals', totals_columns)
+
+    console.log('# Rows:', this.data.length)
+
+    console.log('Individual row length')
+    // this.data.forEach((row, idx) => {
+    //   var this_row = this.getTableColumns(row)
+    //   console.log(idx, 'row cells:', this_row.length)
+    // })
+
+    // transposed
+    console.log('VALIDATE SIZE – TRANSPOSED')
+
+    var t_index_columns = this.transposed_columns.filter(c => c.parent.type === 'transposed_table_index')
+    var t_measures_columns = this.transposed_columns.filter(c => c.parent.type === 'transposed_table_measure' && !c.super)
+    var t_totals_columns = this.transposed_columns.filter(c => c.parent.type === 'transposed_table_measure' && c.super)
+    var t_number_of_columns = t_index_columns.length + t_measures_columns.length + t_totals_columns.length
+    console.log('# Columns:', t_number_of_columns)
+    console.log('    # Index', t_index_columns.length)
+    console.log('    # Measures', t_measures_columns.length)
+    console.log('    # Totals', t_totals_columns.length)
+    console.log('index', t_index_columns)
+    console.log('measures', t_measures_columns)
+    console.log('totals', t_totals_columns)
+
+    console.log('# Rows:', this.transposed_data.length)
+
+    console.log('Cols X Rows, Rows X Cols:', number_of_columns, this.data.length, ' : ', this.transposed_data.length, t_number_of_columns)
   }
 
   /**
@@ -789,6 +842,7 @@ class LookerDataTable {
               column.sort_by_measure_values = [1, m, ...level_sort_values]
               column.sort_by_pivot_values = [1, ...level_sort_values, col_idx]
             } else {
+              column.super = true
               column.sort_by_measure_values = [2, m, ...newArray(this.pivot_fields.length, 0)]
               column.sort_by_pivot_values = [2, ...newArray(this.pivot_fields.length, 0), col_idx]
             }
@@ -1064,7 +1118,7 @@ class LookerDataTable {
       return -1
     }
     this.columns.sort(compareColSortValues)
-    this.setColSpans()
+    this.setColSpans(this.columns)
   }
 
   /**
@@ -1122,7 +1176,7 @@ class LookerDataTable {
 
       for (var d = 0; d < this.columns.length; d++) {
         var column = this.columns[d]
-        subtotal.data[column.id] = { 'cell_style': ['total'] } // set default
+        subtotal.data[column.id] = { 'cell_style': ['total', 'subtotal'] } // set default
 
         if (column.id === '$$$_index_$$$' || column.id === firstVisibleDimension ) {
           var subtotal_label = subTotalGroups[s].join(' | ')
@@ -1330,6 +1384,9 @@ class LookerDataTable {
       if (row.type == 'total' || row.type == 'subtotal') {
         cell_value.cell_style.push('total')
       }
+      if (row.type === 'subtotal') {
+        cell_value.cell_style.push('subtotal')
+      }
       if (cell_value.value < 0) {
         cell_value.cell_style.push('red')
       }
@@ -1339,7 +1396,7 @@ class LookerDataTable {
 
   createVarianceColumn (colpair) {
     var config = this.config
-    if (!this.colSubtotals && colpair.variance.baseline.startsWith('$$$_subtotal_$$$')) {
+    if (!config.colSubtotals && colpair.variance.baseline.startsWith('$$$_subtotal_$$$')) {
       console.log('Cannot calculate variance of column subtotals if subtotals disabled.')
       return
     }
@@ -1712,7 +1769,7 @@ class LookerDataTable {
       transposed_column.align = 'right'
       this.transposed_columns.push(transposed_column)
     }
-    console.log('transposed columns', this.transposed_columns)
+    // console.log('transposed columns', this.transposed_columns)
   }
 
   transposeRows () {
@@ -1732,6 +1789,7 @@ class LookerDataTable {
         }
       })
 
+      // INDEX FIELDS (header, pivot values, measure name)
       transposed_data.header = { value: 'Header TBD', cell_style: [] }
       if (column.subtotal) { transposed_data.header.cell_style.push('subtotal') }
 
@@ -1742,6 +1800,7 @@ class LookerDataTable {
       }
       transposed_data.measure = { value: measure_label, cell_style: [] }
       if (column.subtotal) { transposed_data.measure.cell_style.push('subtotal') }
+      if (column.parent.style.includes('subtotal')) { transposed_data.measure.cell_style.push('subtotal') }
       
       this.pivot_fields.forEach((pivot_field, idx) => {
         transposed_data[pivot_field] = { value: column.levels[idx], cell_style: [] }
@@ -1750,13 +1809,14 @@ class LookerDataTable {
 
       var transposed_row = new Row('line_item')
       transposed_row.id = column.id
+      transposed_row.parent = column.parent
       transposed_row.hide = column.hide
       transposed_row.rowspans = column.colspans
       transposed_row.data = transposed_data
 
       this.transposed_data.push(transposed_row)
     })
-    console.log('transposed rows', this.transposed_data)
+    // console.log('transposed rows', this.transposed_data)
   }
 
   /**
@@ -1764,22 +1824,34 @@ class LookerDataTable {
    * Returns an array of 0s, of length to match the required number of header rows
    */
   getLevels () {
+    var levels = []
     if (!this.transposeTable) {
-      var num_levels =  this.pivot_fields.length + 1
-      if (this.useHeadings && !this.has_pivots) { num_levels++ }      
-      return newArray(num_levels, 0)
+      if (this.useHeadings && !this.has_pivots) { levels.push('headers level') }
+
+      if (this.sortColsBy === 'getSortByPivots') {
+        this.pivots.forEach(pivot => {
+          levels.push(pivot.name)
+        })
+        levels.push('measures level')
+      } else {
+        levels.push('measures level')
+        this.pivots.forEach(pivot => {
+          levels.push(pivot.name)
+        })
+      }
     } else {
-      return this.dimensions
+      levels = this.dimensions
     }
+
+    return levels
   }
 
   /**
    * Performs horizontal cell merge of header values by calculating required colspan values
    * @param {*} columns 
    */
-  setColSpans () {
+  setColSpans (columns) {
     var config = this.config
-    var columns = this.columns
     var header_levels = []
     var span_values = []
     var span_tracker = []
@@ -1867,6 +1939,7 @@ class LookerDataTable {
     for (var c = 0; c < columns.length; c++) {
       columns[c].colspans = span_values[c]
     }
+    
     return columns
   }
 
@@ -1911,7 +1984,7 @@ class LookerDataTable {
       })
     }
 
-    console.log('Column Groups', [index_columns, measure_columns, total_columns])
+    // console.log('Column Groups', [index_columns, measure_columns, total_columns])
   }
 
   /**
@@ -1922,17 +1995,16 @@ class LookerDataTable {
   getTableHeaders (i) {
     if (!this.transposeTable) {
       if (this.useIndexColumn) {
-        var columns = this.columns.filter(c => c.parent.type == 'measure' || c.id == '$$$_index_$$$').filter(c => !c.hide)
+        var columns = this.columns.filter(c => c.parent.type == 'measure' || c.id === '$$$_index_$$$').filter(c => !c.hide)
       } else {
         var columns =  this.columns.filter(c => c.id !== '$$$_index_$$$').filter(c => !c.hide)
       }
 
-      columns = this.columns.filter(c => c.colspans[i] > 0)
+      columns = this.setColSpans(columns).filter(c => c.colspans[i] > 0)
 
       return columns
 
     } else {
-      // return this.transposed_columns
       return this.transposed_columns.filter(c => c.colspans[i] > 0)
     }
 
@@ -1955,11 +2027,11 @@ class LookerDataTable {
     if (!this.transposeTable) {
       // filter out unwanted dimensions based on index_column setting
       if (this.useIndexColumn) {
-        var cells = this.columns.filter(c => c.parent.type == 'measure' || c.id == '$$$_index_$$$').filter(c => !c.hide)
+        var cells = this.columns.filter(c => c.parent.type == 'measure' || c.id === '$$$_index_$$$').filter(c => !c.hide)
       } else {
         var cells =  this.columns.filter(c => c.id !== '$$$_index_$$$').filter(c => !c.hide)
       }
-      
+
       // if we're using all dimensions, and we've got span_rows on, need to update the row
       if (!this.useIndexColumn && this.spanRows) {
       // set row spans, for dimension cells that should appear
@@ -1974,7 +2046,6 @@ class LookerDataTable {
           cells = cells.filter(c => c.parent.type == 'measure' || this.rowspan_values[row.id][c.id] > 0)
         }
       }
-      return cells
     } else {
       var cells = this.transposed_columns.filter(column => true)
       cells.forEach((cell, idx) => {
@@ -1984,10 +2055,8 @@ class LookerDataTable {
         }
       })
       cells = cells.filter(cell => cell.rowspan > 0)
-
-      return cells
     }
-    
+    return cells    
   }
 
   /**
@@ -2057,13 +2126,12 @@ class LookerDataTable {
 exports.LookerDataTable = LookerDataTable
 
 // MUST
-// TODO: Investigate replacing all this.pivot_fields references with this.pivots
 // TODO: update validateConfig to enforce ALL defaults
 
 // SHOULD
-// TODO: Cell merge in transposed index cells
 // TODO: tooltip for data cells
 // TODO: tooltip for index cells
 
 // NICE TO HAVE
+// TODO: Investigate replacing all this.pivot_fields references with this.pivots
 // TODO: option for reporting in 000s or 000000s
