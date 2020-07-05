@@ -56,7 +56,7 @@ const lookerDataTableCoreOptions = {
     type: "boolean",
     label: "Row Subtotals",
     display_size: 'half',
-    default: "false",
+    default: false,
     order: 1,
   },
   colSubtotals: {
@@ -64,7 +64,7 @@ const lookerDataTableCoreOptions = {
     type: "boolean",
     label: "Col Subtotals",
     display_size: 'half',
-    default: "false",
+    default: false,
     order: 2,
   },
   spanRows: {
@@ -72,7 +72,7 @@ const lookerDataTableCoreOptions = {
     type: "boolean",
     label: "Merge Dims",
     display_size: 'half',
-    default: "true",
+    default: true,
     order: 3,
   },
   spanCols: {
@@ -80,7 +80,7 @@ const lookerDataTableCoreOptions = {
     type: "boolean",
     label: "Merge Headers",
     display_size: 'half',
-    default: "true",
+    default: true,
     order: 4,
   },
   subtotalDepth: {
@@ -106,42 +106,42 @@ const lookerDataTableCoreOptions = {
     section: "Table",
     type: "boolean",
     label: "Include View Name",
-    default: "false",
+    default: false,
     order: 7,
   },
   useHeadings: {
     section: "Table",
     type: "boolean",
     label: "Use Headings (non-pivots only)",
-    default: "false",
+    default: false,
     order: 8,
   },
   useShortName: {
     section: "Table",
     type: "boolean",
     label: "Use Short Name (from model)",
-    default: "false",
+    default: false,
     order: 9,
   },
   groupVarianceColumns: {
     section: "Table",
     type: "boolean",
     label: "Group Variance Columns After Pivots",
-    default: "false",
+    default: false,
     order: 10,
   },
   indexColumn: {
     section: "Dimensions",
     type: "boolean",
     label: "Use Last Field Only",
-    default: "false",
+    default: false,
     order: 0,
   },
   tranposeTable: {
     section: "Table",
     type: "boolean",
     label: "Transpose",
-    default: "false",
+    default: false,
     order: 100,
   },
 }
@@ -474,6 +474,8 @@ class LookerDataTable {
     this.transposeTable = config.tranposeTable
 
     var col_idx = 0
+    if (this.transposeTable) { this.useHeadings = false } // TODO: Add support for headers in transposed tables
+
     this.checkPivotsAndSupermeasures(queryResponse)
     this.checkVarianceCalculations()
     this.addDimensions(queryResponse, col_idx)
@@ -495,7 +497,6 @@ class LookerDataTable {
     }
     this.validateConfig()
     this.getTableColumnGroups() // during testing only .. this function will be called by vis code
-    // this.validateTable()
 
     // TODO: more formatting options
     // addSpacerColumns
@@ -505,56 +506,6 @@ class LookerDataTable {
 
   static getCoreConfigOptions() {
     return lookerDataTableCoreOptions
-  }
-
-  validateTable() {
-    var headers = this.getLevels()
-    console.log('# Headers:', headers.length)
-    headers.forEach((header, idx) => {
-      console.log('   level', idx, header)
-    })
-
-    // standard
-    console.log('VALIDATE SIZE – STANDARD')
-    
-    var index_columns = this.useIndexColumn ? ['$$$_index_$$$'] : this.dimensions
-    var measures_columns = this.columns.filter(c => c.parent.type === 'measure').filter(c => !c.super)
-    var totals_columns = this.columns.filter(c => c.parent.type === 'measure').filter(c => c.super)
-    var number_of_columns = index_columns.length + measures_columns.length + totals_columns.length
-    console.log('# Columns:', number_of_columns)
-    console.log('    # Index', index_columns.length)
-    console.log('    # Measures', measures_columns.length)
-    console.log('    # Totals', totals_columns.length)
-    console.log('index', index_columns)
-    console.log('measures', measures_columns)
-    console.log('totals', totals_columns)
-
-    console.log('# Rows:', this.data.length)
-
-    console.log('Individual row length')
-    // this.data.forEach((row, idx) => {
-    //   var this_row = this.getTableColumns(row)
-    //   console.log(idx, 'row cells:', this_row.length)
-    // })
-
-    // transposed
-    console.log('VALIDATE SIZE – TRANSPOSED')
-
-    var t_index_columns = this.transposed_columns.filter(c => c.parent.type === 'transposed_table_index')
-    var t_measures_columns = this.transposed_columns.filter(c => c.parent.type === 'transposed_table_measure' && !c.super)
-    var t_totals_columns = this.transposed_columns.filter(c => c.parent.type === 'transposed_table_measure' && c.super)
-    var t_number_of_columns = t_index_columns.length + t_measures_columns.length + t_totals_columns.length
-    console.log('# Columns:', t_number_of_columns)
-    console.log('    # Index', t_index_columns.length)
-    console.log('    # Measures', t_measures_columns.length)
-    console.log('    # Totals', t_totals_columns.length)
-    console.log('index', t_index_columns)
-    console.log('measures', t_measures_columns)
-    console.log('totals', t_totals_columns)
-
-    console.log('# Rows:', this.transposed_data.length)
-
-    console.log('Cols X Rows, Rows X Cols:', number_of_columns, this.data.length, ' : ', this.transposed_data.length, t_number_of_columns)
   }
 
   /**
@@ -586,6 +537,7 @@ class LookerDataTable {
         type: 'boolean',
         label: 'Hide',
         display_size: 'third',
+        default: false,
         order: i * 10 + 3,
       }
     }
@@ -662,6 +614,7 @@ class LookerDataTable {
         type: 'boolean',
         label: 'Switch',
         display_size: 'third',
+        default: false,
         order: 100 + i * 10 + 6,
       }
 
@@ -670,6 +623,7 @@ class LookerDataTable {
         type: 'boolean',
         label: 'Var #',
         display_size: 'third',
+        default: false,
         order: 100 + i * 10 + 7,
       }
 
@@ -678,6 +632,7 @@ class LookerDataTable {
         type: 'boolean',
         label: 'Var %',
         display_size: 'third',
+        default: false,
         order: 100 + i * 10 + 8,
       }
     }
@@ -2100,6 +2055,18 @@ class LookerDataTable {
     if (!['fixed', 'auto'].includes(this.config.layout)) {
       this.config.layout = 'fixed'
     }
+
+    if (typeof this.config.transposeTable === 'undefined') {
+      this.config.transposeTable = false
+    }
+
+    Object.entries(this.config).forEach(option => {
+      if (option[1] === 'false') {
+        option[1] = false
+      } else if (option[1] === 'true') {
+        option[1] = true
+      }
+    })
   }
 
   /**
