@@ -474,7 +474,7 @@ class LookerDataTable {
     this.transposeTable = config.tranposeTable
 
     var col_idx = 0
-    if (this.transposeTable) { this.useHeadings = false } // TODO: Add support for headers in transposed tables
+    // if (this.transposeTable) { this.useHeadings = false } // TODO: Add support for headers in transposed tables
 
     this.checkPivotsAndSupermeasures(queryResponse)
     this.checkVarianceCalculations()
@@ -1746,6 +1746,7 @@ class LookerDataTable {
 
       // INDEX FIELDS (header, pivot values, measure name)
       transposed_data.header = { value: 'Header TBD', cell_style: [] }
+      transposed_data.header = { value: column.parent.heading, cell_style: [] }
       if (column.subtotal) { transposed_data.header.cell_style.push('subtotal') }
 
       if (this.sortColsBy === 'getSortByPivots') {
