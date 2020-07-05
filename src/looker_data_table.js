@@ -1064,6 +1064,7 @@ class LookerDataTable {
       return -1
     }
     this.columns.sort(compareColSortValues)
+    this.setColSpans()
   }
 
   /**
@@ -1689,7 +1690,11 @@ class LookerDataTable {
         var colspan = []
         var labels = []
         this.dimensions.forEach(dim => {
-          colspan.push(this.rowspan_values[sourceRow.id][dim.name])
+          if (this.spanRows) {
+            colspan.push(this.rowspan_values[sourceRow.id][dim.name])
+          } else {
+            colspan.push(1)
+          }
           labels.push(sourceRow.data[dim.name].value)
         })
       } else if (sourceRow.type === 'subtotal') {
@@ -1746,6 +1751,7 @@ class LookerDataTable {
       var transposed_row = new Row('line_item')
       transposed_row.id = column.id
       transposed_row.hide = column.hide
+      transposed_row.rowspans = column.colspans
       transposed_row.data = transposed_data
 
       this.transposed_data.push(transposed_row)
@@ -1771,8 +1777,9 @@ class LookerDataTable {
    * Performs horizontal cell merge of header values by calculating required colspan values
    * @param {*} columns 
    */
-  setColSpans (columns) {
+  setColSpans () {
     var config = this.config
+    var columns = this.columns
     var header_levels = []
     var span_values = []
     var span_tracker = []
@@ -1920,7 +1927,7 @@ class LookerDataTable {
         var columns =  this.columns.filter(c => c.id !== '$$$_index_$$$').filter(c => !c.hide)
       }
 
-      columns = this.setColSpans(columns).filter(c => c.colspans[i] > 0)
+      columns = this.columns.filter(c => c.colspans[i] > 0)
 
       return columns
 
@@ -1969,7 +1976,16 @@ class LookerDataTable {
       }
       return cells
     } else {
-      return this.transposed_columns
+      var cells = this.transposed_columns.filter(column => true)
+      cells.forEach((cell, idx) => {
+        cell.rowspan = 1
+        if (cell.parent.type === 'transposed_table_index' && typeof row.rowspans[idx] !== 'undefined') {
+          cell.rowspan = row.rowspans[idx]
+        }
+      })
+      cells = cells.filter(cell => cell.rowspan > 0)
+
+      return cells
     }
     
   }
