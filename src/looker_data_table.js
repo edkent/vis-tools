@@ -468,7 +468,10 @@ class LookerDataTable {
     // if (use_column_series) { this.addColumnSeries() }    // for new columns
     this.sortColumns()
     this.applyFormatting()
-    if (this.transposeTable) { this.transposeColumns() }
+    if (this.transposeTable) { 
+      this.transposeColumns() 
+      this.transposeRows()
+    }
     this.validateConfig()
     this.getTableColumnGroups() // during testing only .. this function will be called by vis code
 
@@ -1700,6 +1703,43 @@ class LookerDataTable {
     console.log('transposed columns', this.transposed_columns)
   }
 
+  transposeRows () {
+    this.columns.filter(c => c.parent.type === 'measure').forEach(column => {
+      var transposed_data = {}
+      this.data.forEach(row => {
+        if (typeof row.data[column.id] !== 'undefined') {
+          transposed_data[row.id] = row.data[column.id]
+          transposed_data[row.id]['align'] = 'right'
+          if (typeof transposed_data[row.id]['cell_style'] !== 'undefined') {
+            transposed_data[row.id]['cell_style'].push('transposed')
+          } else {
+            transposed_data[row.id]['cell_style'] = ['transposed']
+          }
+        } else {
+          console.log('row data does not exist for', column.id)
+        }
+      })
+      transposed_data.header = {value: 'Header TBD'}
+      if (this.sortColsBy === 'getSortByPivots') {
+        var measure_label = column.getLabel(this.pivots.length)
+      } else {
+        var measure_label = column.getLabel(0)
+      }
+      transposed_data.measure = { value: measure_label }
+      this.pivot_fields.forEach((pivot_field, idx) => {
+        transposed_data[pivot_field] = { value: column.levels[idx] }
+      })
+      var transposed_row = {
+        id: column.id,
+        hide: column.hide,
+        data: transposed_data
+      }
+
+      this.transposed_data.push(transposed_row)
+    })
+    console.log('transposed rows', this.transposed_data)
+  }
+
   /**
    * Used to support rendering of table as vis. 
    * Returns an array of 0s, of length to match the required number of header rows
@@ -1882,37 +1922,6 @@ class LookerDataTable {
     if (!this.transposeTable) {
       return this.data
     } else {
-      this.columns.filter(c => c.parent.type === 'measure').forEach(column => {
-        var transposed_data = {}
-        this.data.forEach(row => {
-          if (typeof row.data[column.id] !== 'undefined') {
-            transposed_data[row.id] = row.data[column.id]
-            transposed_data[row.id]['align'] = 'right'
-            transposed_data[row.id]['cell_style'].push('transposed')
-          } else {
-            console.log('row data does not exist for', column.id)
-          }
-        })
-        transposed_data.header = {value: 'Header TBD'}
-        if (this.sortColsBy === 'getSortByPivots') {
-          var measure_label = column.getLabel(this.pivots.length)
-        } else {
-          var measure_label = column.getLabel(0)
-        }
-        transposed_data.measure = { value: measure_label }
-        this.pivot_fields.forEach((pivot_field, idx) => {
-          transposed_data[pivot_field] = { value: column.levels[idx] }
-        })
-        var transposed_row = {
-          id: column.id,
-          hide: column.hide,
-          data: transposed_data
-        }
-
-        this.transposed_data.push(transposed_row)
-      })
-      console.log('transposed rows', this.transposed_data)
-
       return this.transposed_data.filter(row => !row.hide)
     }
   }
