@@ -161,6 +161,7 @@ class ModelDimension extends ModelField {
 
     this.type = 'dimension'    
     this.align = 'left'
+    this.hide = false
 
     if (typeof this.table.config['hide|' + this.name] !== 'undefined') {
       if (this.table.config['hide|' + this.name]) {
@@ -469,6 +470,7 @@ class LookerDataTable {
     this.applyFormatting()
     if (this.transposeTable) { this.transposeColumns() }
     this.validateConfig()
+    this.getTableColumnGroups() // during testing only .. this function will be called by vis code
 
     // TODO: more formatting options
     // addSpacerColumns
@@ -1309,6 +1311,10 @@ class LookerDataTable {
 
   createVarianceColumn (colpair) {
     var config = this.config
+    if (!this.colSubtotals && colpair.variance.baseline.startsWith('$$$_subtotal_$$$')) {
+      console.log('Cannot calculate variance of column subtotals if subtotals disabled.')
+      return
+    }
     var id = ['$$$_variance_$$$', colpair.calc, colpair.variance.baseline, colpair.variance.comparison].join('|')
     var baseline = this.getColumnById(colpair.variance.baseline)
     var comparison = this.getColumnById(colpair.variance.comparison)
@@ -1599,12 +1605,12 @@ class LookerDataTable {
     var default_colspan = newArray(this.dimensions.length, 1)
     var index_parent = {
       align: 'left',
-      type: 'measure',
+      type: 'transposed_table_index',
       is_table_calculation: false
     }
     var measure_parent = {
       align: 'right',
-      type: 'measure',
+      type: 'transposed_table_measure',
       is_table_calculation: false
     }
 
@@ -1805,6 +1811,50 @@ class LookerDataTable {
   }
 
   /**
+   * Builds array of arrays, used at by table vis to build column groups
+   * Three column groups: 
+   * - index (dimensions)
+   * - measures (standard measures)
+   * - totals (supermeasures: row totals and some table calcs)
+   * 
+   * For transposed tables:
+   * - index (headers, pivot value, measures)
+   * - measures (Includes subtotals. Cells contain measure values, header rows contain dimension values)
+   * - totals (totals)
+   */
+  getTableColumnGroups () {
+    var index_columns = []
+    var measure_columns = []
+    var total_columns = []
+
+    if (!this.transposeTable) {
+      this.columns.forEach(column => {
+        if (column.parent.type === 'dimension' && !this.useIndexColumn && column.id !== '$$$_index_$$$' && !column.hide) {
+          index_columns.push({ id: column.id })
+        } else if (column.parent.type === 'dimension' && this.useIndexColumn && column.id === '$$$_index_$$$') {
+          index_columns.push({ id: column.id })
+        } else if (column.parent.type === 'measure' && !column.super && !column.hide) {
+          measure_columns.push({ id: column.id })
+        } else if (column.parent.type === 'measure' && column.super && !column.hide) {
+          total_columns.push({ id: column.id })
+        }
+      })
+    } else {
+      this.transposed_columns.forEach(column => {
+        if (column.parent.type === 'transposed_table_index') {
+          index_columns.push({ id: column.id})
+        } else if (column.parent.type === 'transposed_table_measure' && column.id !== 'Total') {
+          measure_columns.push({ id: column.id })
+        } else if (column.parent.type === 'transposed_table_measure' && column.id === 'Total') {
+          total_columns.push({ id: column.id })
+        }
+      })
+    }
+
+    console.log('Column Groups', [index_columns, measure_columns, total_columns])
+  }
+
+  /**
    * Used to support rendering of data table as vis. 
    * Builds list of columns out of data set that should be displayed
    * @param {*} i 
@@ -1844,7 +1894,7 @@ class LookerDataTable {
         })
         transposed_data.header = {value: 'Header TBD'}
         if (this.sortColsBy === 'getSortByPivots') {
-          var measure_label = column.getLabel(1)
+          var measure_label = column.getLabel(this.pivots.length)
         } else {
           var measure_label = column.getLabel(0)
         }
@@ -1966,3 +2016,19 @@ class LookerDataTable {
 }
 
 exports.LookerDataTable = LookerDataTable
+
+// MUST
+// TODO: Catch the bug saved as Look
+// TODO: Style for transposed totals
+// TODO: Investigate replacing all this.pivot_fields references with this.pivots
+// TODO: update validateConfig to enforce ALL defaults
+
+// SHOULD
+// TODO: Investigate use Row and Column classes for this.transposed_* objects
+// TODO: Cell merge in transposed index cells
+// TODO: tooltip for data cells
+// TODO: tooltip for index cells
+
+// NICE TO HAVE
+// TODO: option for reporting in 000s or 000000s
+// TODO: option to load in your own css
