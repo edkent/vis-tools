@@ -1888,6 +1888,7 @@ class LookerDataTable {
           if (typeof row.data[column.id] !== 'undefined') {
             transposed_data[row.id] = row.data[column.id]
             transposed_data[row.id]['align'] = 'right'
+            transposed_data[row.id]['cell_style'].push('transposed')
           } else {
             console.log('row data does not exist for', column.id)
           }
@@ -1898,7 +1899,7 @@ class LookerDataTable {
         } else {
           var measure_label = column.getLabel(0)
         }
-        transposed_data.measure = {value: measure_label}
+        transposed_data.measure = { value: measure_label }
         this.pivot_fields.forEach((pivot_field, idx) => {
           transposed_data[pivot_field] = { value: column.levels[idx] }
         })
@@ -2018,7 +2019,6 @@ class LookerDataTable {
 exports.LookerDataTable = LookerDataTable
 
 // MUST
-// TODO: Catch the bug saved as Look
 // TODO: Style for transposed totals
 // TODO: Investigate replacing all this.pivot_fields references with this.pivots
 // TODO: update validateConfig to enforce ALL defaults
