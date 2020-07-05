@@ -25,10 +25,18 @@ const lookerDataTableCoreOptions = {
     values: [
       { 'Traditional': 'traditional' },
       { 'Looker': 'looker' },
-      { 'Contemporary': 'contemporary' }
+      { 'Contemporary': 'contemporary' },
+      { 'Use custom theme': 'custom'}
     ],
     default: "traditional",
     order: 1,
+  },
+  customTheme: {
+    section: "Theme",
+    type: "string",
+    label: "Load custom CSS from:",
+    default: "",
+    order: 2,
   },
   layout: {
     section: "Theme",
@@ -40,7 +48,7 @@ const lookerDataTableCoreOptions = {
       { 'Auto': 'auto' }
     ],
     default: "fixed",
-    order: 2,
+    order: 3,
   },
   columnOrder: {},
   rowSubtotals: {
@@ -166,9 +174,10 @@ class ModelDimension extends ModelField {
     if (typeof this.table.config['hide|' + this.name] !== 'undefined') {
       if (this.table.config['hide|' + this.name]) {
         this.hide = true
-      } else {
-        this.hide = false
-      }
+      } 
+      // else {
+      //   this.hide = false
+      // }
     }
   }
 }
@@ -187,13 +196,18 @@ class ModelMeasure extends ModelDimension {
     this.can_pivot = can_pivot
     this.is_turtle = is_turtle
     this.align = 'right'
+    this.hide = false
+    this.style = []
 
     if (typeof this.table.config['style|' + this.name] !== 'undefined') {
       if (this.table.config['style|' + this.name] === 'hide') {
         this.hide = true
       } else {
-        this.hide = false
+        this.style.push(this.table.config['style|' + this.name])
       }
+      // else {
+      //   this.hide = false
+      // }
     }
   }
 }
@@ -290,6 +304,7 @@ class Column {
     this.id = id
     this.table = table
     this.parent = parent
+    this.transposed = false
     this.field = {} // Looker field definition
 
     this.idx = 0
@@ -321,6 +336,10 @@ class Column {
     //   level: 0,
     // }
     // params = Object.assign(defaultParams, params)
+
+    if (this.transposed) {
+      return this.labels[level]
+    }
 
     switch (this.variance_type) {
       case 'absolute':
@@ -543,7 +562,8 @@ class LookerDataTable {
         values: [
           {'Normal': 'normal'},
           {'Black/Red': 'black_red'},
-          {'Hide': 'hide'}
+          {'Subtotal': 'subtotal'},
+          {'Hidden': 'hide'}
         ],
         order: 100 + i * 10 + 3
       }
@@ -864,6 +884,9 @@ class LookerDataTable {
           if (typeof row.data[column.id].cell_style === 'undefined') {
             row.data[column.id].cell_style = []
           }
+          if (typeof column.parent.style !== 'undefined') {
+            row.data[column.id].cell_style = row.data[column.id].cell_style.concat(column.parent.style)
+          }
           if (row.data[column.id].value === null) {
             row.data[column.id].rendered = ''
           }
@@ -1140,7 +1163,7 @@ class LookerDataTable {
           var cellValue = {
             value: subtotal_value,
             rendered: rendered,
-            cell_style: ['total']
+            cell_style: ['subtotal', 'total']
           }
           subtotal.data[cellKey] = cellValue
         }
@@ -1257,10 +1280,11 @@ class LookerDataTable {
         }
         row.data[subtotal.id] = {
           value: subtotal_value,
-          rendered: column.value_format === '' ? subtotal_value.toString() : SSF.format(column.parent.value_format, subtotal_value),
-          align: 'right'
+          rendered: subtotal.parent.value_format === '' ? subtotal_value.toString() : SSF.format(subtotal.parent.value_format, subtotal_value),
+          align: 'right',
+          cell_style: ['subtotal']
         }
-        if (['total', 'subtotal'].includes(row.type)) { row.data[subtotal.id].cell_style = ['total'] }
+        if (['subtotal', 'total'].includes(row.type)) { row.data[subtotal.id].cell_style.push('total') }
       }
     }
 
@@ -1618,59 +1642,44 @@ class LookerDataTable {
     }
 
     if (this.useHeadings && !this.has_pivots) {
-      this.transposed_columns.push({
-        id: 'header',
-        getLabel: (i) => i === 0 ? 'Header' : '',
-        colspans: default_colspan,
-        parent: index_parent,
-        type: 'measure',
-        is_table_calculation: false
-      })
+      var transposed_column = new Column('header', this, index_parent)
+      transposed_column.labels = ['Header', '', '']
+      transposed_column.colspans = default_colspan
+      transposed_column.type = 'measure'
+      this.transposed_columns.push(transposed_column)
     }
 
     if (this.sortColsBy === 'getSortByPivots') {
-      console.log('pivot fields first')
       this.pivots.forEach(pivot => {
-        this.transposed_columns.push({
-          id: pivot.name,
-          colspans: default_colspan,
-          parent: index_parent,
-          getLabel: (i) => i === 0 ? pivot.label_short : '',
-          type: 'dimension',
-          align: 'left',
-          is_table_calculation: false
-        })
+        var transposed_column = new Column(pivot.name, this, index_parent)
+        transposed_column.labels = [pivot.label_short, '', '']
+        transposed_column.colspans = default_colspan
+        transposed_column.type = 'dimension'
+        transposed_column.align = 'left'
+        this.transposed_columns.push(transposed_column)
       })
-      this.transposed_columns.push({
-        id: 'measure',
-        colspans: default_colspan,
-        parent: index_parent,
-        getLabel: (i) => i === 0 ? 'Measure' : '',
-        type: 'measure',
-        align: 'left',
-        is_table_calculation: false
-      })
+
+      var transposed_column = new Column('measure', this, index_parent)
+      transposed_column.labels = ['Meaure', '', '']
+      transposed_column.colspans = default_colspan
+      transposed_column.type = 'measure'
+      transposed_column.align = 'left'
+      this.transposed_columns.push(transposed_column)
     } else {
-      console.log('measure names first')
-      this.transposed_columns.push({
-        id: 'measure',
-        colspans: default_colspan,
-        parent: index_parent,
-        getLabel: (i) => i === 0 ? 'Measure' : '',
-        type: 'measure',
-        align: 'left',
-        is_table_calculation: false
-      })
+      var transposed_column = new Column('measure', this, index_parent)
+      transposed_column.labels = ['Meaure', '', '']
+      transposed_column.colspans = default_colspan
+      transposed_column.type = 'measure'
+      transposed_column.align = 'left'
+      this.transposed_columns.push(transposed_column)
+
       this.pivots.forEach(pivot => {
-        this.transposed_columns.push({
-          id: pivot.name,
-          colspans: default_colspan,
-          parent: index_parent,
-          getLabel: (i) => i === 0 ? pivot.label_short : '',
-          type: 'dimension',
-          align: 'left',
-          is_table_calculation: false
-        })
+        var transposed_column = new Column(pivot.name, this, index_parent)
+        transposed_column.labels = [pivot.label_short, '', '']
+        transposed_column.colspans = default_colspan
+        transposed_column.type = 'dimension'
+        transposed_column.align = 'left'
+        this.transposed_columns.push(transposed_column)
       })
     }
     
@@ -1691,14 +1700,12 @@ class LookerDataTable {
         var labels = ['TOTAL'].concat(newArray(this.dimensions.length-1, ''))
       }
 
-      this.transposed_columns.push({
-        id: sourceRow.id,
-        colspans: colspan,
-        parent: measure_parent,
-        labels: labels,
-        align: 'right',
-        is_table_calculation: false
-      })
+      var transposed_column = new Column(sourceRow.id, this, measure_parent)
+      transposed_column.transposed = true
+      transposed_column.colspans = colspan
+      transposed_column.labels = labels
+      transposed_column.align = 'right'
+      this.transposed_columns.push(transposed_column)
     }
     console.log('transposed columns', this.transposed_columns)
   }
@@ -1719,21 +1726,27 @@ class LookerDataTable {
           console.log('row data does not exist for', column.id)
         }
       })
-      transposed_data.header = {value: 'Header TBD'}
+
+      transposed_data.header = { value: 'Header TBD', cell_style: [] }
+      if (column.subtotal) { transposed_data.header.cell_style.push('subtotal') }
+
       if (this.sortColsBy === 'getSortByPivots') {
         var measure_label = column.getLabel(this.pivots.length)
       } else {
         var measure_label = column.getLabel(0)
       }
-      transposed_data.measure = { value: measure_label }
+      transposed_data.measure = { value: measure_label, cell_style: [] }
+      if (column.subtotal) { transposed_data.measure.cell_style.push('subtotal') }
+      
       this.pivot_fields.forEach((pivot_field, idx) => {
-        transposed_data[pivot_field] = { value: column.levels[idx] }
+        transposed_data[pivot_field] = { value: column.levels[idx], cell_style: [] }
+        if (column.subtotal) { transposed_data[pivot_field].cell_style.push('subtotal') }
       })
-      var transposed_row = {
-        id: column.id,
-        hide: column.hide,
-        data: transposed_data
-      }
+
+      var transposed_row = new Row('line_item')
+      transposed_row.id = column.id
+      transposed_row.hide = column.hide
+      transposed_row.data = transposed_data
 
       this.transposed_data.push(transposed_row)
     })
@@ -1995,7 +2008,7 @@ class LookerDataTable {
   }
 
   validateConfig() {
-    if (!['traditional', 'looker', 'contemporary'].includes(this.config.theme)) {
+    if (!['traditional', 'looker', 'contemporary', 'custom'].includes(this.config.theme)) {
       this.config.theme = 'traditional'
     }
 
@@ -2028,16 +2041,13 @@ class LookerDataTable {
 exports.LookerDataTable = LookerDataTable
 
 // MUST
-// TODO: Style for transposed totals
 // TODO: Investigate replacing all this.pivot_fields references with this.pivots
 // TODO: update validateConfig to enforce ALL defaults
 
 // SHOULD
-// TODO: Investigate use Row and Column classes for this.transposed_* objects
 // TODO: Cell merge in transposed index cells
 // TODO: tooltip for data cells
 // TODO: tooltip for index cells
 
 // NICE TO HAVE
 // TODO: option for reporting in 000s or 000000s
-// TODO: option to load in your own css
