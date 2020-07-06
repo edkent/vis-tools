@@ -1751,8 +1751,12 @@ class LookerDataTable {
       })
 
       // INDEX FIELDS (header, pivot values, measure name)
-      // transposed_data.header = { value: 'Header TBD', cell_style: [] }
-      transposed_data.header = { value: column.parent.heading, cell_style: [] }
+      var column_heading = column.parent.heading
+      var key = 'heading|' + column.parent.name
+      if (typeof this.config[key] !== 'undefined') {
+        column_heading = this.config[key] ? this.config[key] : column_heading
+      } 
+      transposed_data.header = { value: column_heading, cell_style: [] }
       if (column.subtotal) { transposed_data.header.cell_style.push('subtotal') }
 
       // TODO: Get the right label value 
