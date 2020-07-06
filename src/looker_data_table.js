@@ -453,6 +453,7 @@ class LookerDataTable {
     this.variances = []
     this.column_series = []
 
+    this.colspan_values = {}
     this.rowspan_values = {}
 
     this.useIndexColumn = config.indexColumn || false
@@ -1073,7 +1074,13 @@ class LookerDataTable {
       return -1
     }
     this.columns.sort(compareColSortValues)
-    this.setColSpans(this.columns)
+
+    if (this.useIndexColumn) {
+      var columns = this.columns.filter(c => c.parent.type == 'measure' || c.id === '$$$_index_$$$').filter(c => !c.hide)
+    } else {
+      var columns =  this.columns.filter(c => c.id !== '$$$_index_$$$').filter(c => !c.hide)
+    }
+    this.setColSpans(columns)
   }
 
   /**
@@ -1724,7 +1731,6 @@ class LookerDataTable {
       transposed_column.align = 'right'
       this.transposed_columns.push(transposed_column)
     }
-    // console.log('transposed columns', this.transposed_columns)
   }
 
   transposeRows () {
@@ -1745,16 +1751,19 @@ class LookerDataTable {
       })
 
       // INDEX FIELDS (header, pivot values, measure name)
-      transposed_data.header = { value: 'Header TBD', cell_style: [] }
+      // transposed_data.header = { value: 'Header TBD', cell_style: [] }
       transposed_data.header = { value: column.parent.heading, cell_style: [] }
       if (column.subtotal) { transposed_data.header.cell_style.push('subtotal') }
 
+      // TODO: Get the right label value 
       if (this.sortColsBy === 'getSortByPivots') {
-        var measure_label = column.getLabel(this.pivots.length)
+        var measure_level = this.pivots.length
       } else {
-        var measure_label = column.getLabel(0)
+        var measure_level = 0
       }
-      transposed_data.measure = { value: measure_label, cell_style: [] }
+      if (this.useHeadings) { measure_level++ }
+
+      transposed_data.measure = { value: column.getLabel(measure_level), cell_style: [] }
       if (column.subtotal) { transposed_data.measure.cell_style.push('subtotal') }
       if (column.parent.style.includes('subtotal')) { transposed_data.measure.cell_style.push('subtotal') }
       
@@ -1772,7 +1781,6 @@ class LookerDataTable {
 
       this.transposed_data.push(transposed_row)
     })
-    // console.log('transposed rows', this.transposed_data)
   }
 
   /**
@@ -1891,11 +1899,12 @@ class LookerDataTable {
 
       span_values.reverse()
     }
-
-    for (var c = 0; c < columns.length; c++) {
-      columns[c].colspans = span_values[c]
-    }
     
+    columns.forEach((column, idx) => {
+      column.colspans = span_values[idx]
+      this.colspan_values[column.id] = span_values[idx]
+    })
+
     return columns
   }
 
@@ -1939,8 +1948,6 @@ class LookerDataTable {
         }
       })
     }
-
-    // console.log('Column Groups', [index_columns, measure_columns, total_columns])
   }
 
   /**
@@ -1956,6 +1963,7 @@ class LookerDataTable {
         var columns =  this.columns.filter(c => c.id !== '$$$_index_$$$').filter(c => !c.hide)
       }
 
+      console.log('GET TABLE HEADERS=====')
       columns = this.setColSpans(columns).filter(c => c.colspans[i] > 0)
 
       return columns
@@ -2007,7 +2015,7 @@ class LookerDataTable {
       cells.forEach((cell, idx) => {
         cell.rowspan = 1
         if (cell.parent.type === 'transposed_table_index' && typeof row.rowspans[idx] !== 'undefined') {
-          cell.rowspan = row.rowspans[idx]
+          cell.rowspan = this.colspan_values[row.id][idx]
         }
       })
       cells = cells.filter(cell => cell.rowspan > 0)
