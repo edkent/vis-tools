@@ -175,9 +175,6 @@ class ModelDimension extends ModelField {
       if (this.table.config['hide|' + this.name]) {
         this.hide = true
       } 
-      // else {
-      //   this.hide = false
-      // }
     }
   }
 }
@@ -205,9 +202,6 @@ class ModelMeasure extends ModelDimension {
       } else {
         this.style.push(this.table.config['style|' + this.name])
       }
-      // else {
-      //   this.hide = false
-      // }
     }
   }
 }
@@ -422,15 +416,29 @@ class LookerDataTable {
    * Build the LookerData object
    * @constructor
    * 
-   * 1. Check for pivots and supermeasures
-   * 2. Check for variance calculations
-   * 3. Build index column
-   * 4.   Index all original columns to preserve order later
-   * 5.   Add dimensions, list of ids, list of full objects
-   * 6.   Add measures, list of ids, list of full objects
-   * 7. Build rows
-   * 8. Build totals
-   * 9. Build row spans
+   * - Check for pivots and supermeasures
+   * - Check for variance calculations
+   * - Add dimensions
+   * - Add measures
+   * - Build index column
+   *   - Index all original columns to preserve order later
+   *   - Add dimensions, list of ids, list of full objects
+   *   - Add measures, list of ids, list of full objects
+   * - Build rows
+   * - Add column series
+   * - Build totals
+   * - Build row spans
+   * - If configured: Add row subtotals
+   * - If configured and 2 pivots: Add column subtotals
+   * - Add variances
+   * - TODO: add new column series
+   * - Sort columns
+   * - Apply formatting
+   * - If configured: transpose table
+   *   - add transposed_columns
+   *   - add transposed_rows
+   * - Validate config
+   * - TODO: Get table column groups
    * 
    * @param {*} lookerData 
    * @param {*} queryResponse 
@@ -475,8 +483,6 @@ class LookerDataTable {
     this.transposeTable = config.tranposeTable
 
     var col_idx = 0
-    // if (this.transposeTable) { this.useHeadings = false } // TODO: Add support for headers in transposed tables
-
     this.checkPivotsAndSupermeasures(queryResponse)
     this.checkVarianceCalculations()
     this.addDimensions(queryResponse, col_idx)
@@ -510,8 +516,10 @@ class LookerDataTable {
   }
 
   /**
-   * Builds new config object based on available dimensions and measures
-   * @param {*} table 
+   * Hook to be called by a Looker custom vis, for example:
+   *    this.trigger('registerOptions', lookerDataTable.getConfigOptions())
+   * 
+   * Returns a new config object, combining the core options with dynamic options based on available dimensions and measures
    */
   getConfigOptions() {
     var newOptions = lookerDataTableCoreOptions
@@ -640,6 +648,14 @@ class LookerDataTable {
     return newOptions
   }
 
+  /**
+   * Update the LookerDataTable instance
+   * - this.pivots
+   * - this.pivot_fields
+   * - this.has_pivots
+   * - this.has_supers
+   * @param {*} queryResponse 
+   */
   checkPivotsAndSupermeasures(queryResponse) {
     for (var p = 0; p < queryResponse.fields.pivots.length; p++) { 
       var name = queryResponse.fields.pivots[p].name
@@ -657,6 +673,10 @@ class LookerDataTable {
     }
   }
 
+  /**
+   * Update the LookerDataTable instace
+   * - this.variances
+   */
   checkVarianceCalculations() {
     var config = this.config
     Object.keys(config).forEach(option => {
@@ -687,6 +707,14 @@ class LookerDataTable {
     })
   }
 
+  /**
+   * When adding dimensions and measures, parses LookML tags and updates:
+   * - heading
+   * - short_name
+   * - unit
+   * @param {*} lookmlField 
+   * @param {*} visModelField 
+   */
   applyVisToolsTags(lookmlField, visModelField) {
     if (typeof lookmlField.tags !== 'undefined') {
       for (var t = 0; t < lookmlField.tags.length; t++) {
@@ -704,6 +732,16 @@ class LookerDataTable {
     }
   }
 
+  /**
+   * Registers dimensions with the LookerDataTable
+   * - this.dimensions
+   * - this.columns
+   * 
+   * Uses this.applyVisToolsTags() to enrich column information
+   * 
+   * @param {*} queryResponse 
+   * @param {*} col_idx 
+   */
   addDimensions(queryResponse, col_idx) {
     for (var d = 0; d < queryResponse.fields.dimension_like.length; d++) {
       var dim = new ModelDimension({
@@ -726,7 +764,6 @@ class LookerDataTable {
       column.sort_by_measure_values = [0, col_idx, ...newArray(this.pivot_fields.length, 0)]
       column.sort_by_pivot_values = [0, ...newArray(this.pivot_fields.length, 0), col_idx]
 
-      // TODO: Fix issue with new constructor pattern breaking hide
       if (typeof this.config['style|' + dim.name] !== 'undefined') {
         if (this.config['style|' + dim.name] === 'hide') {
           this.hide = true
@@ -740,6 +777,16 @@ class LookerDataTable {
     }
   }
 
+  /**
+   * Registers measures with the LookerDataTable
+   * - this.measures
+   * - this.columns
+   * 
+   * Uses this.applyVisToolsTags() to enrich column information
+   * 
+   * @param {*} queryResponse 
+   * @param {*} col_idx 
+   */
   addMeasures(queryResponse, col_idx) {
     var config = this.config
     // add measures, list of ids
@@ -866,6 +913,12 @@ class LookerDataTable {
     }
   }
 
+  /**
+   * Creates the index column, a "for display only" column when the set of dimensions is reduced to
+   * a single column for reporting purposes.
+   * 
+   * @param {*} queryResponse 
+   */
   buildIndexColumn(queryResponse) {
     var index_column = new Column('$$$_index_$$$', this, this.dimensions[this.dimensions.length - 1])
 
@@ -876,6 +929,10 @@ class LookerDataTable {
     this.columns.push(index_column)
   }
 
+  /**
+   * Populates this.data with Rows of data
+   * @param {*} lookerData 
+   */
   buildRows(lookerData) {
     for (var i = 0; i < lookerData.length; i++) {
       var row = new Row('line_item') // TODO: consider creating the row object once all required field values identified
@@ -1759,7 +1816,6 @@ class LookerDataTable {
       transposed_data.header = { value: column_heading, cell_style: [] }
       if (column.subtotal) { transposed_data.header.cell_style.push('subtotal') }
 
-      // TODO: Get the right label value 
       if (this.sortColsBy === 'getSortByPivots') {
         var measure_level = this.pivots.length
       } else {
