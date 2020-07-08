@@ -986,7 +986,7 @@ class LookerDataTable {
       
       row.data['$$$_index_$$$'] = {
         value: lookerData[i][last_dim].value,
-        rendered: this.getRenderedFromHtml(lookerData[i][last_dim].html),
+        rendered: this.getRenderedFromHtml(lookerData[i][last_dim]),
         html: lookerData[i][last_dim].html,
         cell_style: ['indent']
       }
