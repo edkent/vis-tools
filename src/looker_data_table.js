@@ -983,8 +983,10 @@ class LookerDataTable {
       // set an index value (note: this is an index purely for display purposes; row.id remains the unique reference value)
       var last_dim = this.dimensions[this.dimensions.length - 1].name
 
+      
       row.data['$$$_index_$$$'] = {
         value: lookerData[i][last_dim].value,
+        rendered: this.getRenderedFromHtml(lookerData[i][last_dim].html),
         html: lookerData[i][last_dim].html,
         cell_style: ['indent']
       }
@@ -2027,7 +2029,6 @@ class LookerDataTable {
         var columns =  this.columns.filter(c => c.id !== '$$$_index_$$$').filter(c => !c.hide)
       }
 
-      console.log('GET TABLE HEADERS=====')
       columns = this.setColSpans(columns).filter(c => c.colspans[i] > 0)
 
       return columns
