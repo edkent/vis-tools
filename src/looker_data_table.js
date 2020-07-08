@@ -982,8 +982,12 @@ class LookerDataTable {
 
       // set an index value (note: this is an index purely for display purposes; row.id remains the unique reference value)
       var last_dim = this.dimensions[this.dimensions.length - 1].name
-      var last_dim_value = lookerData[i][last_dim].value
-      row.data['$$$_index_$$$'] = { 'value': last_dim_value, 'cell_style': ['indent'] }
+
+      row.data['$$$_index_$$$'] = {
+        value: lookerData[i][last_dim].value,
+        html: lookerData[i][last_dim].html,
+        cell_style: ['indent']
+      }
 
       row.sort = [0, 0, i]
       this.data.push(row)
