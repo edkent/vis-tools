@@ -594,7 +594,7 @@ class LookerDataTable {
       if (this.measures[i].can_pivot) {
         var pivotComparisons = []
         for (var p = 0; p < this.pivot_fields.length; p++) {
-          if (p === 0 || this.config.colSubtotals ) {
+          if (this.pivot_fields.length === 1 || p === 1 || this.config.colSubtotals ) {
             var option = {}
             option['By ' + this.pivot_fields[p]] = this.pivot_fields[p]
             pivotComparisons.push(option)
@@ -940,24 +940,24 @@ class LookerDataTable {
     if (typeof queryResponse.subtotals_data !== 'undefined') {
       this.has_subtotals = true
 
-      if (this.has_pivots) {
+      if (typeof queryResponse.subtotals_data[this.addSubtotalDepth] !== 'undefined') {
         queryResponse.subtotals_data[this.addSubtotalDepth].forEach(lookerSubtotal => {
           var visSubtotal = new Row('subtotal')
-
+  
           visSubtotal['$$$__grouping__$$$'] = lookerSubtotal['$$$__grouping__$$$']
           var groups = ['Subtotal']
           visSubtotal['$$$__grouping__$$$'].forEach(group => {
             groups.push(lookerSubtotal[group].value)
           })
           visSubtotal.id = groups.join('|')
-
+  
           this.columns.forEach(column => {
             if (column.pivoted) {
               visSubtotal.data[column.id] = lookerSubtotal[column.parent.name][column.pivot_key]
             } else {
               visSubtotal.data[column.id] = lookerSubtotal[column.id]
             }
-
+  
             if (typeof visSubtotal.data[column.id] !== 'undefined') {
               if (typeof visSubtotal.data[column.id].cell_style === 'undefined') {
                 visSubtotal.data[column.id].cell_style = ['total', 'subtotal']
@@ -972,7 +972,6 @@ class LookerDataTable {
               }
             }            
           })
-
           this.subtotals_data[visSubtotal.id] = visSubtotal
         })
       }
@@ -1708,6 +1707,11 @@ class LookerDataTable {
           }
           cellValue.cell_style = ['total']
           totals_row.data[column.id] = cellValue
+          if (typeof totals_row.data[column.id].links !== 'undefined') {
+            totals_row.data[column.id].links.forEach(link => {
+              link.type = "measure_default"
+            })
+          }
 
           if (calculate_others && other_value) {
             var formatted_value = column.parent.value_format === '' 
