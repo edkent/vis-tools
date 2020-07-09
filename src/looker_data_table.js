@@ -1305,7 +1305,6 @@ class LookerDataTable {
       subtotal.sort = [0, s, 9999]
       this.data.push(subtotal)
     }
-    console.log('addSubTotals() table prior to sort', this)
     this.sortData()
     this.has_subtotals = true
   }
@@ -1744,7 +1743,7 @@ class LookerDataTable {
    */
   getRenderedFromHtml (cellValue) {
     var parser = new DOMParser()
-    if (cellValue.html !== '') {
+    if (typeof cellValue.html !== 'undefined' && !['undefined', ''].includes(cellValue.html)) {
       try {
         var parsed_html = parser.parseFromString(cellValue.html, 'text/html')
         var rendered = parsed_html.documentElement.textContent
