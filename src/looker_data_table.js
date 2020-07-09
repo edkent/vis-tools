@@ -1746,8 +1746,8 @@ class LookerDataTable {
     var parser = new DOMParser()
     if (cellValue.html !== '') {
       try {
-        var rendered = parser.parseFromString(cellValue.html, 'text/html')
-        rendered = rendered.getElementsByTagName('a')[0].innerText
+        var parsed_html = parser.parseFromString(cellValue.html, 'text/html')
+        var rendered = parsed_html.documentElement.textContent
       }
       catch(TypeError) {
         var rendered = cellValue.html
