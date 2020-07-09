@@ -424,11 +424,16 @@ class LookerDataTable {
    *   - Index all original columns to preserve order later
    *   - Add dimensions, list of ids, list of full objects
    *   - Add measures, list of ids, list of full objects
+   * - TODO: CHECK FOR SUBTOTALS
+   *   – SET this.has_row_totals
+   *   - IF this.has_pivots, FLATTEN SUBTOTALS DATA
+   *   – SET this.subtotals
    * - Build rows
    * - Add column series
    * - Build totals
    * - Build row spans
    * - If configured: Add row subtotals
+   *   – TODO: USE this.subtotals IF AVAILABLE
    * - If configured and 2 pivots: Add column subtotals
    * - Add variances
    * - TODO: add new column series
@@ -451,6 +456,7 @@ class LookerDataTable {
     this.measures = []
     this.columns = []
     this.data = []
+    this.subtotals_data = {}
 
     this.transposed_columns = []
     this.transposed_data = []
@@ -488,6 +494,7 @@ class LookerDataTable {
     this.addDimensions(queryResponse, col_idx)
     this.addMeasures(queryResponse, col_idx)
     this.buildIndexColumn(queryResponse)
+    this.checkSubtotalsData(queryResponse)
     this.buildRows(lookerData)
     if (use_column_series) { this.addColumnSeries() }
     this.buildTotals(queryResponse)
@@ -929,6 +936,49 @@ class LookerDataTable {
     this.columns.push(index_column)
   }
 
+  checkSubtotalsData(queryResponse) {
+    if (typeof queryResponse.subtotals_data !== 'undefined') {
+      this.has_subtotals = true
+
+      if (this.has_pivots) {
+        queryResponse.subtotals_data[this.addSubtotalDepth].forEach(lookerSubtotal => {
+          var visSubtotal = new Row('subtotal')
+
+          visSubtotal['$$$__grouping__$$$'] = lookerSubtotal['$$$__grouping__$$$']
+          var groups = ['Subtotal']
+          visSubtotal['$$$__grouping__$$$'].forEach(group => {
+            groups.push(lookerSubtotal[group].value)
+          })
+          visSubtotal.id = groups.join('|')
+
+          this.columns.forEach(column => {
+            if (column.pivoted) {
+              visSubtotal.data[column.id] = lookerSubtotal[column.parent.name][column.pivot_key]
+            } else {
+              visSubtotal.data[column.id] = lookerSubtotal[column.id]
+            }
+
+            if (typeof visSubtotal.data[column.id] !== 'undefined') {
+              if (typeof visSubtotal.data[column.id].cell_style === 'undefined') {
+                visSubtotal.data[column.id].cell_style = ['total', 'subtotal']
+              } else {
+                isSubtotal.data[column.id].cell_style.concat(['total', 'subtotal'])
+              }
+              if (typeof column.parent.style !== 'undefined') {
+                visSubtotal.data[column.id].cell_style = visSubtotal.data[column.id].cell_style.concat(column.parent.style)
+              }
+              if (visSubtotal.data[column.id].value === null) {
+                visSubtotal.data[column.id].rendered = ''
+              }
+            }            
+          })
+
+          this.subtotals_data[visSubtotal.id] = visSubtotal
+        })
+      }
+    }
+  }
+
   /**
    * Populates this.data with Rows of data
    * @param {*} lookerData 
@@ -1209,48 +1259,53 @@ class LookerDataTable {
         } 
 
         if (column.parent.type == 'measure') {
-          if (column.pivoted) {
-            var cellKey = [column.pivot_key, column.parent.name].join('.') 
+          if (Object.entries(this.subtotals_data).length > 0) {
+            subtotal.data[column.id] = { ...subtotal.data[column.id], ...this.subtotals_data[subtotal.id].data[column.id] }
           } else {
-            var cellKey = column.id
-          }
+            if (column.pivoted) {
+              var cellKey = [column.pivot_key, column.parent.name].join('.') 
+            } else {
+              var cellKey = column.id
+            }
 
-          var subtotal_value = 0
-          var subtotal_items = 0
-          var rendered = ''
-          for (var mr = 0; mr < this.data.length; mr++) {
-            var data_row = this.data[mr]
-            if (data_row.type == 'line_item' && data_row.sort[1] == s) { // data_row.sort[1] == s checks whether its part of the subtotal group
-              var value = data_row.data[cellKey].value
-              if (Number.isFinite(value)) {
-                subtotal_value += value
-                subtotal_items++
-              }
+            var subtotal_value = 0
+            var subtotal_items = 0
+            var rendered = ''
+            for (var mr = 0; mr < this.data.length; mr++) {
+              var data_row = this.data[mr]
+              if (data_row.type == 'line_item' && data_row.sort[1] == s) { // data_row.sort[1] == s checks whether its part of the subtotal group
+                var value = data_row.data[cellKey].value
+                if (Number.isFinite(value)) {
+                  subtotal_value += value
+                  subtotal_items++
+                }
+              } 
+            }
+            
+            if (column.parent.calculation_type === 'average' && subtotal_items > 0) {
+              subtotal_value = subtotal_value / subtotal_items
+            }
+            if (subtotal_value) {
+              rendered = column.parent.value_format === '' ? subtotal_value.toString() : SSF.format(column.parent.value_format, subtotal_value)
+            }
+            if (column.parent.calculation_type === 'string') {
+              subtotal_value = ''
+              rendered = ''
             } 
-          }
-          
-          if (column.parent.calculation_type === 'average' && subtotal_items > 0) {
-            subtotal_value = subtotal_value / subtotal_items
-          }
-          if (subtotal_value) {
-            rendered = column.parent.value_format === '' ? subtotal_value.toString() : SSF.format(column.parent.value_format, subtotal_value)
-          }
-          if (column.parent.calculation_type === 'string') {
-            subtotal_value = ''
-            rendered = ''
-          } 
 
-          var cellValue = {
-            value: subtotal_value,
-            rendered: rendered,
-            cell_style: ['subtotal', 'total']
+            var cellValue = {
+              value: subtotal_value,
+              rendered: rendered,
+              cell_style: ['subtotal', 'total']
+            }
+            subtotal.data[cellKey] = cellValue
           }
-          subtotal.data[cellKey] = cellValue
         }
       }
       subtotal.sort = [0, s, 9999]
       this.data.push(subtotal)
     }
+    console.log('addSubTotals() table prior to sort', this)
     this.sortData()
     this.has_subtotals = true
   }
