@@ -1,9 +1,13 @@
 const path = require('path');
 
 module.exports = {
-  entry: './src/looker_data_table.js',
+  entry: {
+    looker_data_table: './src/looker_data_table.js',
+    vis_plugin: './src/vis_plugin.js',
+    looker_helpers: './src/looker_helpers.js'
+  },
   output: {
-    filename: 'looker_data_table.js',
+    filename: '[name].js',
     path: path.resolve(__dirname),
   },
   devtool: 'source-map',
