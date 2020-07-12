@@ -315,14 +315,11 @@ class VisPluginModel {
         })
       })
     }
-    console.log('jsonData', jsonData)
-    console.log('config.states', this.config.states)
+
     return jsonData
   }
 
   getTooltipFromD3(d) {
-    console.log('getTooltipFromD3() d', d)
-
     var tipText = ''
 
     // this.dimensions.forEach(dimension => {
