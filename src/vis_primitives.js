@@ -13,62 +13,88 @@ const newArray = function(length, value) {
 }
 
 class ModelField {
-  constructor({ vis, name, view, label, is_numeric, value_format = '', heading = '', short_name = '', unit = ''}) {
+  constructor({ vis, queryResponseField }) {
     this.vis = vis
-    this.name = name
-    this.view = view
-    this.label = label
-    this.is_numeric = is_numeric
-    this.value_format = value_format
-    this.heading = heading
-    this.short_name = short_name
-    this.unit = unit
-  }
-}
+    this.name = queryResponseField.name
+    this.view = queryResponseField.view_label || ''
+    this.label = queryResponseField.label_short || queryResponseField.label
+    this.is_numeric = queryResponseField.is_numeric
+    this.is_array = ['list', 'location', 'tier'].includes(queryResponseField.type)
+    this.value_format = queryResponseField.value_format
 
-class ModelDimension extends ModelField {
-  constructor({ 
-    vis, name, view, label, is_numeric,
-    value_format = '', heading = '', short_name = '', unit = ''
-  }) {
-    super({ vis, name, view, label, is_numeric, value_format, heading, short_name, unit })
+    this.geo_type = ''
+    if (queryResponseField.type === 'location' || queryResponseField.map_layer) {
+      this.geo_type = queryResponseField.type === 'location' ? 'location' : queryResponseField.map_layer.name
+    } 
 
-    this.type = 'dimension'    
-    this.align = 'left'
     this.hide = false
-
     if (typeof this.vis.config['hide|' + this.name] !== 'undefined') {
       if (this.vis.config['hide|' + this.name]) {
         this.hide = true
       } 
     }
+
+    this.style = []
+    var style_setting = this.vis.config['style|' + this.name]
+    if (typeof style_setting !== 'undefined') {
+      if (style_setting === 'hide') {
+        this.hide = true
+      } else {
+        this.style.push(style_setting)
+      }
+    }
+
+    this.heading = ''
+    this.short_name = ''
+    this.unit = ''
+    if (typeof queryResponseField.tags !== 'undefined') {
+      queryResponseField.tags.forEach(tag => {
+        var tags = tag.split(':')
+        if (tags[0] === 'vis-tools') {
+          switch (tags[1]) {
+            case 'heading':
+              this.heading = tags[2] ; break
+            case 'short_name':
+              this.short_name = tags[2] ; break
+            case 'unit':
+              this.unit = tags[2] ; break
+            case 'styles':
+              this.styles = Array.isArray(tags[2]) ? tags[2] : [tags[2]] ; break
+          }
+        }
+      })
+    }
   }
 }
 
-class ModelMeasure extends ModelDimension {
-  constructor({ 
-    vis, name, view, label, is_numeric,
-    is_table_calculation, calculation_type, can_pivot, is_turtle = false,
-    heading = '', short_name = '', unit = '', value_format = ''
-  }) {
-    super({ vis, name, view, label, is_numeric, value_format, heading, short_name, unit })
+class ModelDimension extends ModelField {
+  constructor({ vis, queryResponseField }) {
+    super({ vis, queryResponseField })
+
+    this.type = 'dimension'    
+    this.align = 'left'
+  }
+}
+
+class ModelMeasure extends ModelField {
+  constructor({ vis, queryResponseField, can_pivot }) {
+    super({ vis, queryResponseField })
 
     this.type = 'measure'
-    this.is_table_calculation = is_table_calculation
-    this.calculation_type = calculation_type
-    this.can_pivot = can_pivot
-    this.is_turtle = is_turtle
     this.align = 'right'
-    this.hide = false
-    this.style = []
 
-    if (typeof this.vis.config['style|' + this.name] !== 'undefined') {
-      if (this.vis.config['style|' + this.name] === 'hide') {
-        this.hide = true
-      } else {
-        this.style.push(this.vis.config['style|' + this.name])
-      }
-    }
+    this.is_table_calculation = typeof queryResponseField.is_table_calculation !== 'undefined' && queryResponseField.is_table_calculation
+    this.calculation_type = queryResponseField.type
+    this.is_turtle = queryResponseField.is_turtle
+    this.can_pivot = can_pivot
+  }
+}
+
+class PivotField {
+  constructor({ queryResponseField }) {
+    this.name = queryResponseField.name,
+    this.label = queryResponseField.short_label || queryResponseField.label,
+    this.view = queryResponseField.view_label || ''
   }
 }
 
@@ -80,19 +106,20 @@ class Series {
     if (keys.length === values.length ) {
       this.keys = keys
       this.values = values
-      this.types = []
+      this.types = types
 
       var line_items_only = []
       var with_subtotals = []
-      for (var i = 0; i < keys.length; i++) {
+
+      this.values.forEach((value, i) => {
         this.types[i] = typeof types[i] !== 'undefined' ? types[i] : 'line_item'
         if (this.types[i] === 'line_item') {
-          line_items_only.push(this.values[i])
-          with_subtotals.push(this.values[i])
+          line_items_only.push(value)
+          with_subtotals.push(value)
         } else if (this.types[i] === 'subtotal') {
-          with_subtotals.push(this.values[i])
+          with_subtotals.push(value)
         }
-      }
+      })
 
       this.min_for_display = Math.min(with_subtotals)
       this.max_for_display = Math.max(with_subtotals)
@@ -117,13 +144,13 @@ class CellSeries {
 
   to_string() {
     var rendered = ''
-    for (var i = 0; i < this.series.keys.length; i++) {
-      rendered += this.series.keys[i] + ':'
+    this.series.keys.forEach((key, i) => {
+      rendered += key + ':'
       var formatted_value = this.column.modelField.value_format === '' 
                             ? this.series.values[i].toString() 
                             : SSF.format(this.column.modelField.value_format, this.series.values[i])
       rendered += formatted_value + ' '
-    }
+    })
     return rendered
   }
 }
@@ -133,14 +160,6 @@ class ColumnSeries {
     this.column = column
     this.is_numeric = is_numeric
     this.series = new Series(series)
-  }
-}
-
-class PivotField {
-  constructor({ name, label, view }) {
-    this.name = name,
-    this.label = label,
-    this.view = view
   }
 }
 
@@ -196,15 +215,15 @@ class Column {
 
   /**
    * Returns a header label for a column, to display in table vis
-   * @param {*} label_with_view - full field name including label e.g. "Users Name"
-   * @param {*} label_with_pivots - adds all pivot values "Total Users Q1 Male"
+   * @param {*} level
    */
   getLabel (level) {
     if (this.transposed) {
       return this.labels[level]
     }
 
-    if (typeof this.vis.useShortName !== 'undefined') {
+    if (typeof this.vis.visId !== 'undefined' && this.vis.visId === 'report_table') {
+      var label = this.vis.useShortName ? this.modelField.short_name || this.modelField.label : this.modelField.label
       switch (this.variance_type) {
         case 'absolute':
           var label = 'Var #'
@@ -212,23 +231,18 @@ class Column {
         case 'percentage':
           var label = 'Var %'
           break;
-        default:
-          var label = this.vis.useShortName ? this.modelField.short_name || this.modelField.label : this.modelField.label
       }
     } else {
       var label = this.modelField.label
     }
     
-
-    var key = 'label|' + this.modelField.name
-    if (typeof this.vis.config[key] !== 'undefined' && this.vis.config[key] !== this.modelField.label) {
-      label = this.vis.config[key] ? this.vis.config[key] : label
+    var config_setting = this.vis.config['label|' + this.modelField.name]
+    if (typeof config_setting !== 'undefined' && config_setting !== this.modelField.label) {
+      label = config_setting ? config_setting : label
     }
 
-    if (typeof this.vis.useViewName !== 'undefined') {
-      if (this.vis.useViewName) { 
-        label = [this.modelField.view, label].join(' ') 
-      }
+    if (typeof this.vis.useViewName !== 'undefined' && this.vis.useViewName) {
+      label = [this.modelField.view, label].join(' ') 
     }
     
     if (typeof this.vis.has_pivots !== 'undefined') {
@@ -248,9 +262,9 @@ class Column {
         } 
       } else { // flat table
         if (this.vis.useHeadings && level === 0) {
-          var key = 'heading|' + this.modelField.name
-          if (typeof this.vis.config[key] !== 'undefined') {
-            label = this.vis.config[key] ? this.vis.config[key] : this.modelField.heading
+          var config_setting = this.vis.config['heading|' + this.modelField.name]
+          if (typeof config_setting !== 'undefined') {
+            label = config_setting ? config_setting : this.modelField.heading
           } else {
             label = this.modelField.heading
           }
@@ -259,7 +273,6 @@ class Column {
         }
       }
     }
-
     return label
   }
 

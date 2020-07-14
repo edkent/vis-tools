@@ -1,4 +1,4 @@
-import { newArray, ModelDimension, ModelMeasure, PivotField, Row, Column } from './looker_helpers'
+import { newArray, ModelDimension, ModelMeasure, PivotField, Row, Column } from './vis_primitives'
 
 const pluginDefaults = {
   dimensionLabels: true,
@@ -29,6 +29,7 @@ class VisPluginModel {
    * @param {*} queryResponse 
    */
   constructor(lookerData, config, queryResponse) {
+    this.visId = 'vis_plugin'
     this.config = config
 
     this.dimensions = []
@@ -449,8 +450,6 @@ const getConfigOptions = (visModel, pluginSettings=pluginDefaults, baseOptions={
 
   return newOptions
 }
-
-
 
 exports.VisPluginModel = VisPluginModel
 exports.getConfigOptions = getConfigOptions

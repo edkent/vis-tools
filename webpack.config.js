@@ -2,9 +2,9 @@ const path = require('path');
 
 module.exports = {
   entry: {
-    looker_data_table: './src/looker_data_table.js',
+    vis_table_plugin: './src/vis_table_plugin.js',
     vis_plugin: './src/vis_plugin.js',
-    looker_helpers: './src/looker_helpers.js'
+    vis_primitives: './src/vis_primitives.js'
   },
   output: {
     filename: '[name].js',
@@ -20,4 +20,3 @@ module.exports = {
     ]
   }
 };
-
