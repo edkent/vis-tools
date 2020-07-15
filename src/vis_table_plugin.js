@@ -1,6 +1,6 @@
 import SSF from "ssf"
 
-import { newArray, ModelDimension, ModelMeasure, CellSeries, ColumnSeries, Row, Column } from './vis_primitives'
+import { newArray, ModelDimension, ModelMeasure, PivotField, CellSeries, ColumnSeries, Row, Column } from './vis_primitives'
 
 const tableModelCoreOptions = {
   theme: {
@@ -69,13 +69,6 @@ const tableModelCoreOptions = {
     default: true,
     order: 4,
   },
-  subtotalDepth: {
-    section: "Table",
-    type: "number",
-    label: "Sub Total Depth",
-    default: 1,
-    order: 5,
-  },
   sortColumnsBy: {
     section: "Table",
     type: "string",
@@ -123,7 +116,7 @@ const tableModelCoreOptions = {
     default: false,
     order: 0,
   },
-  tranposeTable: {
+  transposeTable: {
     section: "Table",
     type: "boolean",
     label: "Transpose",
@@ -199,7 +192,7 @@ class VisPluginTableModel {
     this.useShortName = config.useShortName || false
     this.useViewName = config.useViewName || false
     this.addRowSubtotals = config.rowSubtotals || false
-    this.addSubtotalDepth = config.subtotalDepth || this.dimensions.length - 1
+    this.addSubtotalDepth = parseInt(config.subtotalDepth)|| this.dimensions.length - 1
     this.spanRows = false || config.spanRows
     this.spanCols = false || config.spanCols
     this.sortColsBy = config.sortColumnsBy || 'getSortByPivots'
@@ -210,7 +203,7 @@ class VisPluginTableModel {
     this.has_pivots = false
     this.has_supers = false
 
-    this.transposeTable = config.tranposeTable
+    this.transposeTable = config.transposeTable
 
     var col_idx = 0
     this.checkPivotsAndSupermeasures(queryResponse)
@@ -223,7 +216,7 @@ class VisPluginTableModel {
     this.addColumnSeries()
     this.buildTotals(queryResponse)
     this.updateRowSpanValues()
-    if (this.config.rowSubtotals) { this.addSubTotals(config.subtotalDepth) }
+    if (this.config.rowSubtotals) { this.addSubTotals() }
     if (this.config.colSubtotals && this.pivot_fields.length == 2) { this.addColumnSubTotals() }
     this.addVarianceColumns()
     // this.addColumnSeries()    // TODO: add column series for generated columns (eg column subtotals)
@@ -250,6 +243,7 @@ class VisPluginTableModel {
   getConfigOptions() {
     var newOptions = tableModelCoreOptions
 
+    var subtotal_options = []
     this.dimensions.forEach((dimension, i) => {
       newOptions['label|' + dimension.name] = {
         section: 'Dimensions',
@@ -275,21 +269,37 @@ class VisPluginTableModel {
         default: false,
         order: i * 10 + 3,
       }
+
+      if (i < this.dimensions.length - 1) {
+        var subtotal_option = {}
+        subtotal_option[dimension.label] = (i + 1).toString()
+        subtotal_options.push(subtotal_option)
+      }
     })
+
+    newOptions['subtotalDepth'] = {
+      section: "Table",
+      type: "string",
+      label: "Sub Total Depth",
+      display: 'select',
+      values: subtotal_options,
+      default: "1",
+      order: 5,
+    }
 
     this.measures.forEach((measure, i) => {
       newOptions['label|' + measure.name] = {
         section: 'Measures',
         type: 'string',
-        label: measure.label_short || measure.label,
-        default: measure.label_short || measure.label,
+        label: measure.label,
+        default: measure.label,
         order: 100 + i * 10 + 1,
       }
 
       newOptions['heading|' + measure.name] = {
         section: 'Measures',
         type: 'string',
-        label: 'Heading for ' + ( measure.label_short || measure.label ),
+        label: 'Heading for ' + measure.label,
         default: '',
         order: 100 + i * 10 + 2,
       }
@@ -312,10 +322,10 @@ class VisPluginTableModel {
       
       if (measure.can_pivot) {
         var pivotComparisons = []
-        this.pivot_fields.forEach((pivot_field, p) => {
-          if (this.pivot_fields.length === 1 || p === 1 || this.config.colSubtotals ) {
+        this.pivots.forEach((pivot, p) => {
+          if (this.pivots.length === 1 || p === 1 || this.config.colSubtotals ) {
             var option = {}
-            option['By ' + pivot_field] = pivot_field
+            option['By ' + pivot.label] = pivot.name
             pivotComparisons.push(option)
           }
         })
@@ -358,7 +368,7 @@ class VisPluginTableModel {
         type: 'boolean',
         label: 'Var #',
         display_size: 'third',
-        default: false,
+        default: true,
         order: 100 + i * 10 + 7,
       }
 
@@ -385,7 +395,7 @@ class VisPluginTableModel {
   checkPivotsAndSupermeasures(queryResponse) {
     queryResponse.fields.pivots.forEach(pivot_field => { 
       this.pivot_fields.push(pivot_field.name) 
-      this.pivots.push(pivot_field)
+      this.pivots.push(new PivotField(pivot_field))
     })
 
     if (typeof queryResponse.pivots !== 'undefined') {
@@ -403,19 +413,18 @@ class VisPluginTableModel {
    * - this.variances
    */
   checkVarianceCalculations() {
-    var config = this.config
-    Object.keys(config).forEach(option => {
+    Object.keys(this.config).forEach(option => {
       if (option.startsWith('comparison')) {
         var baseline = option.split('|')[1]
 
-        if (this.pivot_fields.includes(config[option])) {
+        if (this.pivot_fields.includes(this.config[option])) {
           var type = 'by_pivot'
         } else {
           var type = 'vs_measure'
         }
 
-        if (typeof config['switch|' + baseline] !== 'undefined') {
-          if (config['switch|' + baseline]) {
+        if (typeof this.config['switch|' + baseline] !== 'undefined') {
+          if (this.config['switch|' + baseline]) {
             var reverse = true
           } else {
             var reverse = false
@@ -424,7 +433,7 @@ class VisPluginTableModel {
 
         this.variances.push({
           baseline: baseline,
-          comparison: config[option],
+          comparison: this.config[option],
           type: type,
           reverse: reverse
         })
@@ -719,11 +728,11 @@ class VisPluginTableModel {
    * @param {*} id 
    */
   getColumnById (id) {
-    var column = ''
+    var column = {}
     this.columns.forEach(c => {
       if (id === c.id) { 
-        column = c
-      } 
+        column = c 
+      }
     })
     return column
   }
@@ -1077,7 +1086,7 @@ class VisPluginTableModel {
         var cell_value = {
           value: baseline_value - comparison_value,
           rendered: value_format === '' ? (baseline_value - comparison_value).toString() : SSF.format(value_format, (baseline_value - comparison_value)),
-          cell_style: []
+          cell_style: row.data[baseline.id].cell_style
         }
       } else {
         var value = (baseline_value - comparison_value) / Math.abs(comparison_value)
@@ -1085,13 +1094,13 @@ class VisPluginTableModel {
           var cell_value = {
             value: null,
             rendered: '∞',
-            cell_style: []
+            cell_style: row.data[baseline.id].cell_style
           }
         } else {
           var cell_value = {
             value: value,
             rendered: SSF.format('#0.00%', value),
-            cell_style: []
+            cell_style: row.data[baseline.id].cell_style
           }
         }
       }
@@ -1109,14 +1118,15 @@ class VisPluginTableModel {
   }
 
   createVarianceColumn (colpair) {
-    var config = this.config
-    if (!config.colSubtotals && colpair.variance.baseline.startsWith('$$$_subtotal_$$$')) {
+    console.log('createVarianceColumn() colpair:', colpair)
+    if (!this.config.colSubtotals && colpair.variance.baseline.startsWith('$$$_subtotal_$$$')) {
       console.log('Cannot calculate variance of column subtotals if subtotals disabled.')
       return
     }
     var id = ['$$$_variance_$$$', colpair.calc, colpair.variance.baseline, colpair.variance.comparison].join('|')
     var baseline = this.getColumnById(colpair.variance.baseline)
     var comparison = this.getColumnById(colpair.variance.comparison)
+    console.log('baseline:', baseline)
     var column = new Column(id, this, baseline.modelField)
 
     if (colpair.calc === 'absolute') {
@@ -1125,7 +1135,7 @@ class VisPluginTableModel {
       column.pos = baseline.pos + 1
       column.sort_by_measure_values = baseline.sort_by_measure_values.concat(1)
       column.sort_by_pivot_values = baseline.sort_by_pivot_values.concat(1)
-      column.hide = !config['var_num|' + baseline.modelField.name]
+      column.hide = !this.config['var_num|' + baseline.modelField.name]
     } else {
       column.variance_type = 'percentage'
       column.idx = baseline.idx + 2
@@ -1133,7 +1143,7 @@ class VisPluginTableModel {
       column.sort_by_measure_values = baseline.sort_by_measure_values.concat(2)
       column.sort_by_pivot_values = baseline.sort_by_pivot_values.concat(2)
       column.unit = '%'
-      column.hide = !config['var_pct|' + baseline.modelField.name]
+      column.hide = !this.config['var_pct|' + baseline.modelField.name]
     }
 
     // TODO: Review sort values / algorithms
@@ -1144,20 +1154,17 @@ class VisPluginTableModel {
       baseline.sort_by_pivot_values.push(0)
     }
 
-    if (typeof config.columnOrder[column.id] !== 'undefined') {
-      column.pos = config.columnOrder[column.id]
+    if (typeof this.config.columnOrder[column.id] !== 'undefined') {
+      column.pos = this.config.columnOrder[column.id]
     } 
 
-    column.field = {
-      name: id
-    }
     column.pivoted = baseline.pivoted
     column.super = baseline.super
     column.pivot_key = ''
 
     column.levels = baseline.levels
-    if (config.groupVarianceColumns) {
-      if (config.sortColumnsBy === 'getSortByPivots') {
+    if (this.config.groupVarianceColumns) {
+      if (this.config.sortColumnsBy === 'getSortByPivots') {
         column.sort_by_pivot_values[0] = 1.5
       }
       if (baseline.levels.length === 1) {
@@ -1582,17 +1589,18 @@ class VisPluginTableModel {
     
     // init header_levels and span_values arrays
     for (var c = columns.length-1; c >= 0; c--) {
+      var column = columns[c]
       var idx = columns.length - 1 - c
 
       if (this.sortColsBy === 'getSortByPivots') {
-        header_levels[idx] = [...columns[c].levels, columns[c].modelField.name]
+        header_levels[idx] = [...column.levels, column.modelField.name]
       } else {
-        header_levels[idx] = [columns[c].field.name, ...columns[c].levels]
+        header_levels[idx] = [column.modelField.name, ...column.levels]
       }
 
       if (this.useHeadings && !this.has_pivots) {
-        var column_heading = columns[c].modelField.heading
-        var key = 'heading|' + columns[c].modelField.name
+        var column_heading = column.modelField.heading
+        var key = 'heading|' + column.modelField.name
         if (typeof config[key] !== 'undefined') {
           column_heading = config[key] ? config[key] : column_heading
         } 
@@ -1833,6 +1841,22 @@ class VisPluginTableModel {
       } else if (option[1] === 'true') {
         option[1] = true
       }
+
+      if (option[0].split('|').length === 2) {
+        var [field_option, field_name] = option[0].split('|')
+        if (['label', 'heading', 'hide', 'style', 'switch', 'var_num', 'var_pct'].includes(field_option)) {
+          var keep_option = false
+          this.dimensions.forEach(dimension => {
+            if (dimension.name === field_name) { keep_option = true }
+          })
+          this.measures.forEach(measure => {
+            if (measure.name === field_name) { keep_option = true }
+          })
+          if (!keep_option) {
+            delete this.config[option[0]]
+          } 
+        }
+      }
     })
   }
 
@@ -1861,15 +1885,35 @@ exports.VisPluginTableModel = VisPluginTableModel
 
 // MUST
 // TODO: update validateConfig to enforce ALL defaults
+// TODO: fix bug where Series extents be calculated as NaNs
 
 // SHOULD
 // TODO: tooltip for data cells
 // TODO: tooltip for index cells
 
 // NICE TO HAVE
+// TODO: row & cell highlight on mouseover
 // TODO: Investigate replacing all this.pivot_fields references with this.pivots
 // TODO: option for reporting in 000s or 000000s
 // TODO: more formatting options
 // TODO: addSpacerColumns
 // TODO: addUnitHeaders
 // TODO: addRowNumbers // to Index Column only?
+// TODO: build an explore URL (eg new table calcs) so user can save their variances as a query?
+//        - users would want to preserve column order, could that be done in vis_config?
+
+// FRs
+//
+// Ability to "expand rows" for print
+// Config widget to provide checklist display for arrays (e.g. apply multiple styles)
+// Additional info in queryResponse
+//  - filters set on the query
+//  - context (are we in a dashboard or an explore e.g. so that additional info & warnings can be shown in explore)
+// Additional info in details
+//  - Is this the "final" updateAsync call?
+// Pass through custom theme information
+// Ability to not just update filters, but also
+//  - Send table_calc expressions back to the explore (eg for variance analysis)
+//  - Send custom field definitions back to the explore
+//  - Request new fields be added to the explore (e.g. add "hierarchies" based on drill_fields:)
+// Ability to add horizontal lines to a config section (to split apart field-based options)

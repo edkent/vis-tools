@@ -34,13 +34,13 @@ class ModelField {
       } 
     }
 
-    this.style = []
+    this.style = ''
     var style_setting = this.vis.config['style|' + this.name]
     if (typeof style_setting !== 'undefined') {
       if (style_setting === 'hide') {
         this.hide = true
       } else {
-        this.style.push(style_setting)
+        this.style = style_setting
       }
     }
 
@@ -58,8 +58,8 @@ class ModelField {
               this.short_name = tags[2] ; break
             case 'unit':
               this.unit = tags[2] ; break
-            case 'styles':
-              this.styles = Array.isArray(tags[2]) ? tags[2] : [tags[2]] ; break
+            case 'style':
+              this.style = tags[2] ; break
           }
         }
       })
@@ -93,7 +93,7 @@ class ModelMeasure extends ModelField {
 class PivotField {
   constructor({ queryResponseField }) {
     this.name = queryResponseField.name,
-    this.label = queryResponseField.short_label || queryResponseField.label,
+    this.label = queryResponseField.label_short || queryResponseField.label,
     this.view = queryResponseField.view_label || ''
   }
 }

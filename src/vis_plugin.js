@@ -90,10 +90,7 @@ class VisPluginModel {
     queryResponse.fields.dimension_like.forEach(dimension => {
       var dim = new ModelDimension({
         vis: this,
-        name: dimension.name,
-        label: dimension.label_short || dimension.label,
-        view: dimension.view_label || '',
-        is_numeric: dimension.is_numeric
+        modelField: dimension
       })
       this.dimensions.push(dim)
       this.ranges[dim.name] = {
@@ -102,12 +99,6 @@ class VisPluginModel {
 
       var column = new Column(dim.name, this, dim) 
       column.levels = newArray(queryResponse.fields.pivots.length, '') // populate empty levels when pivoted
-
-      if (typeof this.config['hide|' + column.id] !== 'undefined') {
-        if (this.config['hide|' + column.id]) {
-          column.hide = true
-        }
-      }
 
       this.columns.push(column)
     })
@@ -118,10 +109,7 @@ class VisPluginModel {
     queryResponse.fields.measure_like.forEach(measure => {
       var mea = new ModelMeasure({
         vis: this,
-        name: measure.name,
-        label: measure.label_short || measure.label,
-        view: measure.view_label || '',
-        is_table_calculation: typeof measure.is_table_calculation !== 'undefined',
+        modelField: measure
       })
       this.measures.push(mea) 
       this.ranges[mea.name] = {
@@ -183,9 +171,8 @@ class VisPluginModel {
     if (typeof queryResponse.fields.supermeasure_like !== 'undefined') {
       queryResponse.fields.supermeasure_like.forEach(supermeasure => {
         var mea = new ModelMeasure({
-          name: supermeasure.name,
-          label: supermeasure.label,
-          view: '',
+          vis: this,
+          modelField: supermeasure
         })
         this.measures.push(mea) 
 
@@ -193,11 +180,6 @@ class VisPluginModel {
         column.levels = newArray(queryResponse.fields.pivots.length, '')
         column.super = true
 
-        if (typeof this.config['style|' + column.id] !== 'undefined') {
-          if (this.config['style|' + column.id] === 'hide') {
-            column.hide = true
-          }
-        }
         this.columns.push(column)
       })
     }
@@ -322,10 +304,6 @@ class VisPluginModel {
 
   getTooltipFromD3(d) {
     var tipText = ''
-
-    // this.dimensions.forEach(dimension => {
-    //   tiptext += "<p><em>" + dimension.label + ":</em> " + row[dimension.name].rendered + "</p>"
-    // })
 
     Object.entries(d).forEach(entry => {
       tipText += "<p><em>" + entry[0] + ":</em> " + entry[1] + "</p>"
