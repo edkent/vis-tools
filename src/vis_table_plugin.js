@@ -339,7 +339,7 @@ class VisPluginTableModel {
                             this.has_row_totals && !comparisonMeasure.is_table_calculation         
         if (i != j && includeMeasure) {
           var option = {}
-          option['vs. ' + comparisonMeasure.label] = comparisonMeasure.name
+          option['Vs. ' + comparisonMeasure.label] = comparisonMeasure.name
           comparisonOptions.push(option)
         }
       })
@@ -395,7 +395,9 @@ class VisPluginTableModel {
   checkPivotsAndSupermeasures(queryResponse) {
     queryResponse.fields.pivots.forEach(pivot_field => { 
       this.pivot_fields.push(pivot_field.name) 
-      this.pivots.push(new PivotField(pivot_field))
+      this.pivots.push(new PivotField({
+        queryResponseField: pivot_field
+      }))
     })
 
     if (typeof queryResponse.pivots !== 'undefined') {
@@ -707,14 +709,14 @@ class VisPluginTableModel {
    * Applies conditional formatting (red if negative) to all measure columns set to use it 
    */
   applyFormatting() {
-    this.columns.forEach(col => {
-      var config_setting = this.config['style|' + col.modelField.name]
+    this.columns.forEach(column => {
+      var config_setting = this.config['style|' + column.modelField.name]
       if (typeof config_setting !== 'undefined') {
         switch (config_setting) {
           case 'black_red':
             this.data.forEach(row => {
-              if (row.data[col.id].value < 0) {
-                row.data[col.id].cell_style.push('red')
+              if (row.data[column.id].value < 0) {
+                row.data[column.id].cell_style.push('red')
               }
             })
             break
@@ -1086,7 +1088,7 @@ class VisPluginTableModel {
         var cell_value = {
           value: baseline_value - comparison_value,
           rendered: value_format === '' ? (baseline_value - comparison_value).toString() : SSF.format(value_format, (baseline_value - comparison_value)),
-          cell_style: row.data[baseline.id].cell_style
+          cell_style: []
         }
       } else {
         var value = (baseline_value - comparison_value) / Math.abs(comparison_value)
@@ -1094,13 +1096,13 @@ class VisPluginTableModel {
           var cell_value = {
             value: null,
             rendered: '∞',
-            cell_style: row.data[baseline.id].cell_style
+            cell_style: []
           }
         } else {
           var cell_value = {
             value: value,
             rendered: SSF.format('#0.00%', value),
-            cell_style: row.data[baseline.id].cell_style
+            cell_style: []
           }
         }
       }
@@ -1118,7 +1120,6 @@ class VisPluginTableModel {
   }
 
   createVarianceColumn (colpair) {
-    console.log('createVarianceColumn() colpair:', colpair)
     if (!this.config.colSubtotals && colpair.variance.baseline.startsWith('$$$_subtotal_$$$')) {
       console.log('Cannot calculate variance of column subtotals if subtotals disabled.')
       return
@@ -1126,7 +1127,6 @@ class VisPluginTableModel {
     var id = ['$$$_variance_$$$', colpair.calc, colpair.variance.baseline, colpair.variance.comparison].join('|')
     var baseline = this.getColumnById(colpair.variance.baseline)
     var comparison = this.getColumnById(colpair.variance.comparison)
-    console.log('baseline:', baseline)
     var column = new Column(id, this, baseline.modelField)
 
     if (colpair.calc === 'absolute') {
@@ -1844,7 +1844,7 @@ class VisPluginTableModel {
 
       if (option[0].split('|').length === 2) {
         var [field_option, field_name] = option[0].split('|')
-        if (['label', 'heading', 'hide', 'style', 'switch', 'var_num', 'var_pct'].includes(field_option)) {
+        if (['label', 'heading', 'hide', 'style', 'switch', 'var_num', 'var_pct', 'comparison'].includes(field_option)) {
           var keep_option = false
           this.dimensions.forEach(dimension => {
             if (dimension.name === field_name) { keep_option = true }
