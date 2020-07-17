@@ -198,7 +198,6 @@ class Column {
     this.pos = 0
     this.levels = []
     this.pivot_key = '' 
-    this.colspans = []
 
     this.unit = modelField.unit || ''
     this.hide = modelField.hide || false
@@ -211,6 +210,9 @@ class Column {
     
     this.sort_by_measure_values = [] // [index -1|dimension 0|measure 1|row totals & supermeasures 2, column number, [measure values]  ]
     this.sort_by_pivot_values = []   // [index -1|dimension 0|measure 1|row totals & supermeasures 2, [pivot values], column number    ]
+
+    this.colspans = []
+    this.vis.colspan_values[this.id] = newArray(this.vis.number_of_levels, -1)
   }
 
   /**
@@ -223,7 +225,6 @@ class Column {
     }
 
     if (typeof this.vis.visId !== 'undefined' && this.vis.visId === 'report_table') {
-      var label = this.vis.useShortName ? this.modelField.short_name || this.modelField.label : this.modelField.label
       switch (this.variance_type) {
         case 'absolute':
           var label = 'Var #'
@@ -231,6 +232,8 @@ class Column {
         case 'percentage':
           var label = 'Var %'
           break;
+        default:
+          var label = this.vis.useShortName ? this.modelField.short_name || this.modelField.label : this.modelField.label
       }
     } else {
       var label = this.modelField.label
@@ -274,6 +277,15 @@ class Column {
       }
     }
     return label
+  }
+
+  getHeaderLevels () {
+    if (this.modelField.vis.sortColsBy === 'getSortByPivots') {
+      var header_levels = [...this.levels, this.getLabel(this.levels.length)]
+    } else {
+      var header_levels = [this.getLabel(0), ...this.levels]
+    }
+    return header_levels
   }
 
   updateSortByMeasures (idx) {
