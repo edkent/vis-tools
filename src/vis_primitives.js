@@ -279,13 +279,38 @@ class Column {
     return label
   }
 
+  /***
+   * Returns array of all header fields per column
+   * 1. Combine pivot values with measure label, in order set by sortColsBy option
+   * 2. Add headings if used (option chosen, flat tables only)
+   */
   getHeaderLevels () {
     if (this.modelField.vis.sortColsBy === 'getSortByPivots') {
       var header_levels = [...this.levels, this.getLabel(this.levels.length)]
     } else {
       var header_levels = [this.getLabel(0), ...this.levels]
     }
+
+    if (this.modelField.vis.useHeadings && !this.modelField.vis.has_pivots) {
+      var column_heading = this.modelField.heading
+      var config_setting = this.modelField.vis.config['heading|' + this.modelField.name]
+      if (typeof config_setting !== 'undefined') {
+        column_heading = config_setting ? config_setting : column_heading
+      } 
+      header_levels.unshift(column_heading)
+    }
+
     return header_levels
+  }
+
+  getHeaderData () {
+    var headerData = {}
+    var levels = this.getHeaderLevels()
+    this.modelField.vis.headers.forEach((header, i) => {
+      headerData[header.name] = levels[i]
+    })
+
+    return headerData
   }
 
   updateSortByMeasures (idx) {

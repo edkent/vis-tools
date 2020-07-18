@@ -169,6 +169,7 @@ class VisPluginTableModel {
     this.visId = 'report_table'
     this.config = config
 
+    this.headers = []
     this.dimensions = []
     this.measures = []
     this.columns = []
@@ -185,6 +186,7 @@ class VisPluginTableModel {
     this.column_series = []
 
     this.colspan_values = {}
+    this.colspan_values_ = {}
     this.rowspan_values = {}
 
     this.useIndexColumn = config.indexColumn || false
@@ -207,6 +209,7 @@ class VisPluginTableModel {
 
     var col_idx = 0
     this.checkPivotsAndSupermeasures(queryResponse)
+    this.addHeaders()
     this.addDimensions(queryResponse, col_idx)
     this.addMeasures(queryResponse, col_idx)
     this.checkVarianceCalculations()
@@ -221,6 +224,7 @@ class VisPluginTableModel {
     this.addVarianceColumns()
     // this.addColumnSeries()    // TODO: add column series for generated columns (eg column subtotals)
     this.sortColumns()
+    this.setColSpans_()
     this.setColSpans()
     this.applyFormatting()
     if (this.transposeTable) { 
@@ -413,6 +417,33 @@ class VisPluginTableModel {
     this.number_of_levels = this.has_pivots ? this.pivots.length + 1 : 1
     if (this.useHeadings && !this.has_pivots) {
       this.number_of_levels++
+    }
+  }
+
+  addHeaders() {
+    this.pivots.forEach(pivot => {
+      this.headers.push(pivot)
+    })
+
+    var measureHeader = {
+      label: '',
+      name: 'measure',
+      view: ''
+    }
+
+    if (this.sortColsBy === 'getSortByPivots') {
+      this.headers.push(measureHeader)
+    } else {
+      this.headers.unshift(measureHeader)
+    }
+
+    if (this.useHeadings && !this.has_pivots) {
+      var headingHeader = {
+        label: '',
+        name: 'heading',
+        view: ''
+      }
+      this.headers.unshift(headingHeader)
     }
   }
 
@@ -838,7 +869,7 @@ class VisPluginTableModel {
       span_tracker[dimension.name] = 1
     })
 
-    // loop backwards through data rows
+    // Loop backwards through data rows
     for (var r = this.data.length - 1; r >= 0 ; r--) {
       var row = this.data[r]
 
@@ -850,7 +881,7 @@ class VisPluginTableModel {
         continue;
       }
 
-      // loop fowards through the dimensions
+      // Loop fowards through the dimensions
       this.rowspan_values[row.id] = {}
       for (var i = 0; i < this.dimensions.length; i++) {
         var dimension = this.dimensions[i]
@@ -1330,6 +1361,83 @@ class VisPluginTableModel {
     }
   }
 
+  /**
+   * 1. build rows
+   * 2. backwards <--- rows
+   *    3. Check for resets (totals, subtotals .. what's column equivalent, change of top pivot?)
+   *    4. Forwards ---> thru columns
+   *        5. Match: mark invisible (span_value = -1). Increment the span_tracker.
+   *        6. Diff: set span_value from span_tracker. Partial reset and continue.
+   */
+  setColSpans_ () {
+    var leaves = []
+    var tiers = this.headers
+    var span_values = this.colspan_values_
+    var span_tracker = {}
+    tiers.forEach(tier => {
+      span_tracker[tier.name] = 1
+    })
+
+    // 1)
+    if (this.useIndexColumn) {
+      var columns = this.columns
+                      .filter(c => c.modelField.type === 'measure' || c.id === '$$$_index_$$$')
+                      .filter(c => !c.hide)
+    } else {
+      var columns = this.columns
+                      .filter(c => c.id !== '$$$_index_$$$')
+                      .filter(c => !c.hide)
+    }
+
+    columns.forEach(column => {
+      var leaf = {
+        id: column.id,
+        data: column.getHeaderData()
+      }
+      leaves.push(leaf)
+    })
+
+    console.log('new setColSpans() leaves', leaves)
+
+    // 2)
+    for (var l = leaves.length - 1; l >= 0; l--) {
+      var leaf = leaves[l]
+      span_values[leaf.id] = {}
+      console.log('leaf:---------------------------', leaf)
+
+      // 3) - reset need not yet identified?
+
+      // 4)
+      for (var t = 0; t < tiers.length; t++) {
+        var tier = tiers[t]
+        console.log('tier:', tier)
+        var this_tier_value = leaf.data[tier.name]
+        if (l > 0) {
+          var neighbour_value = leaves[l - 1].data[tier.name]
+          console.log('this_tier_value', this_tier_value)
+          console.log('neighbour_value', neighbour_value)
+        }
+
+        // 5) 
+        if (l > 0 && this_tier_value === neighbour_value) {
+          console.log('MATCH: leaf.id, tier.name', leaf.id, tier.name)
+          span_values[leaf.id][tier.name] = -1;
+          span_tracker[tier.name] += 1;
+        } else {
+        // 6) 
+          console.log('DIFF: span_tracker', JSON.stringify(span_tracker, null, 2))
+          for (var t_ = t; t_ < tiers.length; t_++) {
+            var tier_ = tiers[t_]
+            console.log('DIFF: leaf.id, tier_.name', leaf.id, tier_.name)
+            span_values[leaf.id][tier_.name] = span_tracker[tier_.name];
+            span_tracker[tier_.name] = 1
+          }
+          break;
+        }
+      }
+    }
+  }
+
     /**
    * Performs horizontal cell merge of header values by calculating required colspan values
    * @param {*} columns 
@@ -1354,24 +1462,11 @@ class VisPluginTableModel {
       var column = columns[c]
       var idx = columns.length - 1 - c
 
-      // if (this.sortColsBy === 'getSortByPivots') {
-      //   header_levels[idx] = [...column.levels, column.getLabel(column.levels.length)]
-      // } else {
-      //   header_levels[idx] = [column.getLabel(0), ...column.levels]
-      // }
       header_levels[idx] = column.getHeaderLevels()
-
-      if (this.useHeadings && !this.has_pivots) {
-        var column_heading = column.modelField.heading
-        var config_setting = this.config['heading|' + column.modelField.name]
-        if (typeof config_setting !== 'undefined') {
-          column_heading = config_setting ? config_setting : column_heading
-        } 
-        header_levels[idx].unshift(column_heading)
-      }
 
       span_values[c] = newArray(header_levels[idx].length, 1)
     }
+    console.log('old setColSpans() header_levels', header_levels)
 
     if (this.spanCols) {
       span_tracker = newArray(header_levels[0].length, 1)
