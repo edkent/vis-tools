@@ -194,9 +194,9 @@ class VisPluginTableModel {
     if (this.hasSubtotals) { this.checkSubtotalsData(queryResponse) }
 
     this.addRows(lookerData)
+    this.addColumnSeries()
     console.log('Table in progress:', this)
     return
-    this.addColumnSeries()
 
     if (this.hasTotals) { this.buildTotals(queryResponse) }
     if (this.spanRows) { this.setRowSpans() }

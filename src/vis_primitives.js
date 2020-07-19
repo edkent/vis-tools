@@ -135,10 +135,10 @@ class Series {
         }
       })
 
-      this.min_for_display = Math.min(with_subtotals)
-      this.max_for_display = Math.max(with_subtotals)
-      this.min = Math.min(line_items_only)
-      this.max = Math.max(line_items_only)
+      this.min_for_display = Math.min(...with_subtotals)
+      this.max_for_display = Math.max(...with_subtotals)
+      this.min = Math.min(...line_items_only)
+      this.max = Math.max(...line_items_only)
       this.sum = line_items_only.reduce((a, b) => a + b, 0)
       this.count = line_items_only.length
       this.avg = line_items_only.length > 0 ? this.sum / line_items_only.length : null
