@@ -90,11 +90,13 @@ class ModelMeasure extends ModelField {
   }
 }
 
-class PivotField {
-  constructor({ queryResponseField }) {
+class HeaderField {
+  constructor({ vis, queryResponseField = { name: '', label: '', view: '' }} = { vis, queryResponseField }) {
+    console.log('HeaderField()', vis, queryResponseField.name)
+    this.vis = vis
     this.name = queryResponseField.name,
-    this.label = queryResponseField.label_short || queryResponseField.label,
-    this.view = queryResponseField.view_label || ''
+    this.label = queryResponseField.label_short ? queryResponseField.label_short : queryResponseField.label,
+    this.view = queryResponseField.view_label
   }
 }
 
@@ -142,7 +144,7 @@ class CellSeries {
     this.series = new Series(series)
   }
 
-  to_string() {
+  toString() {
     var rendered = ''
     this.series.keys.forEach((key, i) => {
       rendered += key + ':'
@@ -172,6 +174,7 @@ class Row {
   constructor(type = 'line_item') {
     this.id = ''
     this.modelField = null
+    this.hide = false
     this.type = type  // line_item | subtotal | total
     this.sort = []    // [ section, subtotal group, row number ]
     this.data = {}    // Indexed by Column.id
@@ -212,7 +215,12 @@ class Column {
     this.sort_by_pivot_values = []   // [index -1|dimension 0|measure 1|row totals & supermeasures 2, [pivot values], column number    ]
 
     this.colspans = []
-    this.vis.colspan_values[this.id] = newArray(this.vis.number_of_levels, -1)
+
+    var colspan_values = {}
+    this.vis.headers.forEach(header => {
+      colspan_values[header.name] = -1
+    })
+    this.vis.colspan_values[this.id] = colspan_values
   }
 
   /**
@@ -335,6 +343,6 @@ exports.ModelDimension = ModelDimension
 exports.ModelMeasure = ModelMeasure
 exports.CellSeries = CellSeries
 exports.ColumnSeries = ColumnSeries
-exports.PivotField = PivotField
+exports.HeaderField = HeaderField
 exports.Row = Row
 exports.Column = Column
