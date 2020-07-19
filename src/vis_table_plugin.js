@@ -1,6 +1,6 @@
 import SSF from "ssf"
 
-import { newArray, ModelDimension, ModelMeasure, HeaderField, CellSeries, ColumnSeries, Row, Column } from './vis_primitives'
+import { newArray, ModelDimension, ModelPivot, ModelMeasure, HeaderField, CellSeries, ColumnSeries, Row, Column } from './vis_primitives'
 
 const tableModelCoreOptions = {
   theme: {
@@ -75,10 +75,10 @@ const tableModelCoreOptions = {
     display: "select",
     label: "Sort Columns By",
     values: [
-      { 'Pivots': 'getSortByPivots' },
-      { 'Measures': 'getSortByMeasures' }
+      { 'Pivots': 'pivots' },
+      { 'Measures': 'measures' }
     ],
-    default: "getSortByPivots",
+    default: "pivots",
     order: 6,
   },
   useViewName: {
@@ -91,14 +91,14 @@ const tableModelCoreOptions = {
   useHeadings: {
     section: "Table",
     type: "boolean",
-    label: "Use Headings (non-pivots only)",
+    label: "Use Headings",
     default: false,
     order: 8,
   },
   useShortName: {
     section: "Table",
     type: "boolean",
-    label: "Use Short Name (from model)",
+    label: "Use Short Name (from model tags)",
     default: false,
     order: 9,
   },
@@ -133,32 +133,7 @@ class VisPluginTableModel {
    * Build the LookerData object
    * @constructor
    * 
-   * - Check for pivots and supermeasures
-   * - Check for variance calculations
-   * - Add dimensions
-   * - Add measures
-   * - Build index column
-   *   - Index all original columns to preserve order later
-   *   - Add dimensions, list of ids, list of full objects
-   *   - Add measures, list of ids, list of full objects
-   * - TODO: CHECK FOR SUBTOTALS
-   *   – SET this.hasRowTotals
-   *   - IF this.hasPivots, FLATTEN SUBTOTALS DATA
-   *   – SET this.subtotals
-   * - Build rows
-   * - Add column series
-   * - Build totals
-   * - Build row spans
-   * - If configured: Add row subtotals
-   * - If configured and 2 pivots: Add column subtotals
-   * - Add variances
    * - TODO: add new column series
-   * - Sort columns
-   * - Apply formatting
-   * - If configured: transpose table
-   *   - add transposed_columns
-   *   - add transposed_rows
-   * - Validate config
    * - TODO: Get table column groups
    * 
    * @param {*} lookerData 
@@ -180,8 +155,8 @@ class VisPluginTableModel {
     this.transposed_columns = []
     this.transposed_data = []
 
-    this.pivots = []
-    this.pivot_values = []
+    this.pivot_fields = []
+    this.pivot_values = typeof queryResponse.pivots !== 'undefined' ? queryResponse.pivots : []
     this.variances = []
     this.column_series = []
 
@@ -197,41 +172,50 @@ class VisPluginTableModel {
     this.addColSubtotals = config.colSubtotals || false
     this.spanRows = false || config.spanRows
     this.spanCols = false || config.spanCols
-    this.sortColsBy = config.sortColumnsBy || 'getSortByPivots'
+    this.sortColsBy = config.sortColumnsBy || 'pivots'
+    this.groupVarianceColumns = config.groupVarianceColumns || false
 
     this.hasTotals = typeof queryResponse.totals_data !== 'undefined' ? true : false
     this.calculateOthers = typeof queryResponse.truncated !== 'undefined' ? queryResponse.truncated : false 
-    this.hasSubtotals = false
+    this.hasSubtotals = typeof queryResponse.subtotals_data !== 'undefined' ? true : false
     this.hasRowTotals = queryResponse.has_row_totals || false
-    this.hasPivots = false
-    this.hasSupers = false
+    this.hasPivots = typeof queryResponse.pivots !== 'undefined' ? true : false
+    this.hasSupers = typeof queryResponse.fields.supermeasure_like !== 'undefined' ? Boolean(queryResponse.fields.supermeasure_like.length) : false
 
-    this.transposeTable = config.transposeTable
+    this.transposeTable = config.transposeTable || false
 
     var col_idx = 0
-    this.checkPivotsAndSupermeasures(queryResponse)
-    this.addHeaders()
+    this.addPivotsAndHeaders(queryResponse)
     this.addDimensions(queryResponse, col_idx)
+    console.log('Table in progress:', this)
+    return
     this.addMeasures(queryResponse, col_idx)
+
+    console.log('base table created', this)
+
     this.checkVarianceCalculations()
-    if (this.useIndexColumn) { this.buildIndexColumn(queryResponse) }
-    this.checkSubtotalsData(queryResponse)
-    this.buildRows(lookerData)
+    if (this.useIndexColumn) { this.addIndexColumn(queryResponse) }
+    if (this.hasSubtotals) { this.checkSubtotalsData(queryResponse) }
+
+    this.addRows(lookerData)
     this.addColumnSeries()
+
     if (this.hasTotals) { this.buildTotals(queryResponse) }
     if (this.spanRows) { this.setRowSpans() }
     if (this.addRowSubtotals) { this.addSubTotals() }
-    if (this.addColSubtotals && this.pivots.length === 2) { this.addColumnSubTotals() }
-    console.log(this)
-    this.addVarianceColumns()
+    if (this.addColSubtotals && this.pivot_fields.length === 2) { this.addColumnSubTotals() }
+    if (this.variances) { this.addVarianceColumns() }
+
     // this.addColumnSeries()    // TODO: add column series for generated columns (eg column subtotals)
     this.sortColumns()
     if (this.spanCols) { this.setColSpans() }
     this.applyFormatting()
+
     if (this.transposeTable) { 
       this.transposeColumns() 
       this.transposeRows()
     }
+
     this.validateConfig()
     // this.getTableColumnGroups() 
   }
@@ -328,10 +312,10 @@ class VisPluginTableModel {
       
       if (measure.can_pivot) {
         var pivotComparisons = []
-        this.pivots.forEach((pivot, p) => {
-          if (this.pivots.length === 1 || p === 1 || this.config.colSubtotals ) {
+        this.pivot_fields.forEach((pivot_field, p) => {
+          if (this.pivot_fields.length === 1 || p === 1 || this.config.colSubtotals ) {
             var option = {}
-            option['By ' + pivot.label] = pivot.name
+            option['By ' + pivot_field.label] = pivot_field.name
             pivotComparisons.push(option)
           }
         })
@@ -391,61 +375,33 @@ class VisPluginTableModel {
   }
 
   /**
-   * Update the VisPluginTableModel instance
-   * - this.pivots
-   * - this.hasPivots
-   * - this.hasSupers
+   * - this.pivot_fields
+   * - this.headers
    * @param {*} queryResponse 
    */
-  checkPivotsAndSupermeasures(queryResponse) {
-    queryResponse.fields.pivots.forEach(pivot => 
-      this.pivots.push(new HeaderField({ vis: this, queryResponseField: pivot }))
-    )
-
-    if (typeof queryResponse.pivots !== 'undefined') {
-      this.pivot_values = queryResponse.pivots
-      this.hasPivots = true
-    }
-
-    if (typeof queryResponse.fields.supermeasure_like !== 'undefined') {
-      this.hasSupers = true
-    }
-  }
-
-  addHeaders() {
-    var measureHeader = new HeaderField({ vis: this, queryResponseField: {
-      label: '',
-      name: 'measure',
-      view: ''
-    }})
-
-    this.pivots.forEach(pivot => {
-      this.headers.push(pivot)
+  addPivotsAndHeaders(queryResponse) {
+    queryResponse.fields.pivots.forEach((pivot, i) => {
+      var pivot_field = new ModelPivot({ vis: this, queryResponseField: pivot })
+      this.pivot_fields.push(pivot_field)
+      this.headers.push(new HeaderField({ vis: this, type: 'pivot' + i, modelField: pivot_field }))
     })
 
-    if (this.sortColsBy === 'getSortByPivots') {
-      this.headers.push(measureHeader)
-    } else {
-      this.headers.unshift(measureHeader)
-    }
+    var measureHeaders = this.useHeadings 
+      ? [new HeaderField({ vis: this, type: 'heading', modelField: { label: '(will be replaced by header for column)s' } })] 
+      : []
+    
+    measureHeaders.push(new HeaderField({ vis: this, type: 'field', modelField: { label: '(will be replaced by field for column)' } }))
 
-    if (this.useHeadings && !this.hasPivots) {
-      var headingHeader = new HeaderField({ vis: this, queryResponseField: {
-        label: '',
-        name: 'heading',
-        view: ''
-      }})
-      this.headers.unshift(headingHeader)
+    if (this.sortColsBy === 'pivots') {
+      this.headers.push(...measureHeaders)
+    } else {
+      this.headers.unshift(...measureHeaders)
     }
   }
 
   /**
-   * Registers dimensions with the VisPluginTableModel
    * - this.dimensions
    * - this.columns
-   * 
-   * Uses this.applyVisToolsTags() to enrich column information
-   * 
    * @param {*} queryResponse 
    * @param {*} col_idx 
    */
@@ -460,9 +416,23 @@ class VisPluginTableModel {
 
       var column = new Column(newDimension.name, this, newDimension) 
       column.idx = col_idx
-      column.levels = newArray(this.pivots.length, new HeaderField({ vis: this, queryResponseField: {} }))
-      column.sort_by_measure_values = [0, col_idx, ...newArray(this.pivots.length, 0)]
-      column.sort_by_pivot_values = [0, ...newArray(this.pivots.length, 0), col_idx]
+      this.headers.forEach(header => {
+        switch (header.type) {
+          case 'pivot0':
+          case 'pivot1':
+            var pivot_field = new ModelPivot({ vis: this, queryResponseField: header.modelField })
+            column.levels.push(new HeaderField({ vis: this, type: 'pivot', modelField: pivot_field }))
+            break
+          case 'heading':
+            column.levels.push(new HeaderField({ vis: this, type: 'heading', modelField: newDimension }))
+            break
+          case 'field':
+            column.levels.push(new HeaderField({ vis: this, type: 'field', modelField: newDimension }))
+            break
+        }
+      })
+      column.sort_by_measure_values = [0, col_idx, ...newArray(this.pivot_fields.length, 0)]
+      column.sort_by_pivot_values = [0, ...newArray(this.pivot_fields.length, 0), col_idx]
 
       this.columns.push(column)
       col_idx += 10
@@ -480,7 +450,6 @@ class VisPluginTableModel {
    * @param {*} col_idx 
    */
   addMeasures(queryResponse, col_idx) {
-    var config = this.config
     // add measures, list of ids
     queryResponse.fields.measure_like.forEach(measure => {
       var newMeasure = new ModelMeasure({
@@ -503,33 +472,43 @@ class VisPluginTableModel {
           )
 
           if (include_measure) {
-            var columnId = pivot_value.key + '.' + measure.name
-
-            var levels = [] // will contain a list of all the pivot values for this column
-            var level_sort_values = []
-            this.pivots.forEach(pivot => { 
-              levels.push(new HeaderField({ vis: this, queryResponseField: {
-                name: pivot_value['data'][pivot.name],
-                label: '',
-                view: ''
-              }}))
-              level_sort_values.push(pivot_value['sort_values'][pivot.name]) 
-            })
-
-            var modelField = measure
-            var column = new Column(columnId, this, modelField)
-            column.idx = col_idx
-            column.levels = levels
+            var column = new Column([pivot_value.key, measure.name].join('.'), this, measure)
             column.pivoted = true
             column.pivot_key = pivot_value.key
+            column.idx = col_idx
+
+            var level_sort_values = []
+            this.headers.forEach(header => {
+              switch (header.type) {
+                case 'pivot0':
+                case 'pivot1':
+                  // column.levels.push(new HeaderField({ vis: this, type: 'pivot' }))
+                  column.levels.push(new HeaderField({ 
+                    vis: this, 
+                    type: 'pivot', 
+                    modelField: { label: pivot_value['data'][header.name] },
+                    pivotData: pivot_value
+                  }))
+                  level_sort_values.push(pivot_value['sort_values'][header.name])
+                  break
+
+                case 'heading':
+                  column.levels.push(new HeaderField({ vis: this, type: 'heading', modelField: measure}))
+                  break
+
+                case 'field':
+                  column.levels.push(new HeaderField({ vis: this, type: 'field', modelField: measure}))
+                  break;
+              }
+            })
 
             if (pivot_value.key !== '$$$_row_total_$$$') {
               column.sort_by_measure_values = [1, m, ...level_sort_values]
               column.sort_by_pivot_values = [1, ...level_sort_values, col_idx]
             } else {
               column.super = true
-              column.sort_by_measure_values = [2, m, ...newArray(this.pivots.length, 0)]
-              column.sort_by_pivot_values = [2, ...newArray(this.pivots.length, 0), col_idx]
+              column.sort_by_measure_values = [2, m, ...newArray(this.pivot_fields.length, 0)]
+              column.sort_by_pivot_values = [2, ...newArray(this.pivot_fields.length, 0), col_idx]
             }
 
             this.columns.push(column)
@@ -541,10 +520,23 @@ class VisPluginTableModel {
       // noticeably simpler for flat tables!
       this.measures.forEach(measure => {
         var column = new Column(measure.name, this, measure)
+
+        this.headers.forEach(header => {
+          switch (header.type) {
+            case 'heading':
+              column.levels.push(new HeaderField({ vis: this, type: 'heading', modelField: measure}))
+              break
+
+            case 'field':
+              column.levels.push(new HeaderField({ vis: this, type: 'field', modelField: measure}))
+              break;
+          }
+        })
+
         column.idx = col_idx
         try {
-          if (typeof config.columnOrder[column.id] !== 'undefined') {
-            column.pos = config.columnOrder[column.id]
+          if (typeof this.config.columnOrder[column.id] !== 'undefined') {
+            column.pos = this.config.columnOrder[column.id]
           } else {
             column.pos = col_idx
           }
@@ -571,11 +563,24 @@ class VisPluginTableModel {
         this.measures.push(meas) 
 
         var column = new Column(meas.name, this, meas)
+        this.headers.forEach(header => {
+          switch (header.type) {
+            case 'pivot0':
+            case 'pivot1':
+              column.levels.push(new HeaderField({ vis: this, type: 'pivot' }))
+              break
+            case 'heading':
+              column.levels.push(new HeaderField({ vis: this, type: 'heading', modelField: meas }))
+              break
+            case 'field':
+              column.levels.push(new HeaderField({ vis: this, type: 'field', modelField: meas }))
+              break
+          }
+        })
         column.idx = col_idx
-        column.levels = newArray(this.pivots.length, new HeaderField({ vis: this, queryResponseField: {} }))
         column.super = true
-        column.sort_by_measure_values = [2, col_idx, ...newArray(this.pivots.length, 1)]
-        column.sort_by_pivot_values = [2, ...newArray(this.pivots.length, 1), col_idx]
+        column.sort_by_measure_values = [2, col_idx, ...newArray(this.pivot_fields.length, 1)]
+        column.sort_by_pivot_values = [2, ...newArray(this.pivot_fields.length, 1), col_idx]
 
         this.columns.push(column)
         col_idx += 10
@@ -600,7 +605,7 @@ class VisPluginTableModel {
         })
 
         if (baseline_in_measures) {
-          if (this.pivots.map(pivot => pivot.name).includes(this.config[option])) {
+          if (this.pivot_fields.map(pivot_field => pivot_field.name).includes(this.config[option])) {
             var type = 'by_pivot'
           } else {
             var type = 'vs_measure'
@@ -629,51 +634,62 @@ class VisPluginTableModel {
    * Creates the index column, a "for display only" column when the set of dimensions is reduced to
    * a single column for reporting purposes.
    */
-  buildIndexColumn() {
-    var index_column = new Column('$$$_index_$$$', this, this.dimensions[this.dimensions.length - 1])
+  addIndexColumn() {
+    var dimension = this.dimensions[this.dimensions.length - 1]
+    var index_column = new Column('$$$_index_$$$', this, dimension)
+    index_column.hide = false
 
-    index_column.levels = newArray(this.pivots.length, new HeaderField({ vis: this, queryResponseField: {} }))
-    index_column.sort_by_measure_values = [-1, 0, ...newArray(this.pivots.length, 0)]
-    index_column.sort_by_pivot_values = [-1, ...newArray(this.pivots.length, 0), 0]
+    this.headers.forEach(header => {
+      switch (header.type) {
+        case 'pivot0':
+        case 'pivot1':
+          index_column.levels.push(new HeaderField({ vis: this, type: 'pivot' }))
+          break
+        case 'heading':
+          index_column.levels.push(new HeaderField({ vis: this, type: 'heading', modelField: dimension}))
+          break
+        case 'field':
+          index_column.levels.push(new HeaderField({ vis: this, type: 'field', modelField: dimension}))
+          break;
+      }
+    })
+    index_column.sort_by_measure_values = [-1, 0, ...newArray(this.pivot_fields.length, 0)]
+    index_column.sort_by_pivot_values = [-1, ...newArray(this.pivot_fields.length, 0), 0]
     
     this.columns.push(index_column)
   }
 
   checkSubtotalsData(queryResponse) {
-    if (typeof queryResponse.subtotals_data !== 'undefined') {
-      this.hasSubtotals = true
+    if (typeof queryResponse.subtotals_data[this.addSubtotalDepth] !== 'undefined') {
+      queryResponse.subtotals_data[this.addSubtotalDepth].forEach(lookerSubtotal => {
+        var visSubtotal = new Row('subtotal')
 
-      if (typeof queryResponse.subtotals_data[this.addSubtotalDepth] !== 'undefined') {
-        queryResponse.subtotals_data[this.addSubtotalDepth].forEach(lookerSubtotal => {
-          var visSubtotal = new Row('subtotal')
-  
-          visSubtotal['$$$__grouping__$$$'] = lookerSubtotal['$$$__grouping__$$$']
-          var groups = ['Subtotal']
-          visSubtotal['$$$__grouping__$$$'].forEach(group => {
-            groups.push(lookerSubtotal[group].value)
-          })
-          visSubtotal.id = groups.join('|')
-  
-          this.columns.forEach(column => {
-            visSubtotal.data[column.id] = column.pivoted ? lookerSubtotal[column.modelField.name][column.pivot_key] : lookerSubtotal[column.id]
-  
-            if (typeof visSubtotal.data[column.id] !== 'undefined') {
-              if (typeof visSubtotal.data[column.id].cell_style === 'undefined') {
-                visSubtotal.data[column.id].cell_style = ['total', 'subtotal']
-              } else {
-                visSubtotal.data[column.id].cell_style.concat(['total', 'subtotal'])
-              }
-              if (typeof column.modelField.style !== 'undefined') {
-                visSubtotal.data[column.id].cell_style = visSubtotal.data[column.id].cell_style.concat(column.modelField.style)
-              }
-              if (visSubtotal.data[column.id].value === null) {
-                visSubtotal.data[column.id].rendered = ''
-              }
-            }            
-          })
-          this.subtotals_data[visSubtotal.id] = visSubtotal
+        visSubtotal['$$$__grouping__$$$'] = lookerSubtotal['$$$__grouping__$$$']
+        var groups = ['Subtotal']
+        visSubtotal['$$$__grouping__$$$'].forEach(group => {
+          groups.push(lookerSubtotal[group].value)
         })
-      }
+        visSubtotal.id = groups.join('|')
+
+        this.columns.forEach(column => {
+          visSubtotal.data[column.id] = column.pivoted ? lookerSubtotal[column.modelField.name][column.pivot_key] : lookerSubtotal[column.id]
+
+          if (typeof visSubtotal.data[column.id] !== 'undefined') {
+            if (typeof visSubtotal.data[column.id].cell_style === 'undefined') {
+              visSubtotal.data[column.id].cell_style = ['total', 'subtotal']
+            } else {
+              visSubtotal.data[column.id].cell_style.concat(['total', 'subtotal'])
+            }
+            if (typeof column.modelField.style !== 'undefined') {
+              visSubtotal.data[column.id].cell_style = visSubtotal.data[column.id].cell_style.concat(column.modelField.style)
+            }
+            if (visSubtotal.data[column.id].value === null) {
+              visSubtotal.data[column.id].rendered = ''
+            }
+          }            
+        })
+        this.subtotals_data[visSubtotal.id] = visSubtotal
+      })
     }
   }
 
@@ -681,7 +697,7 @@ class VisPluginTableModel {
    * Populates this.data with Rows of data
    * @param {*} lookerData 
    */
-  buildRows(lookerData) {
+  addRows(lookerData) {
     lookerData.forEach((lookerRow, i) => {
       var row = new Row('line_item') // TODO: consider creating the row object once all required field values identified
       
@@ -841,7 +857,7 @@ class VisPluginTableModel {
 
   /**
    * 1. Build list of leaves
-   * 2. Build list of tiers
+   * 2. Build list of tiers (and initialise span_tracker)
    * 3. Backwards <--- leaves
    *    4. Check for resets (n/a for colspans)
    *    5. Forwards ---> tiers
@@ -879,7 +895,6 @@ class VisPluginTableModel {
       span_values[leaf.id] = {}
       for (var t = 0; t < tiers.length; t++) {
         var tier = tiers[t]
-
         var this_tier_value = leaf.data[tier.name].value
         var neighbour_value = l > 0 ? leaves[l - 1].data[tier.name].value : null
 
@@ -1022,7 +1037,7 @@ class VisPluginTableModel {
     var subtotals = []
 
     var pivots = []
-    var pivot_dimension = this.pivots[0].name
+    var pivot_dimension = this.pivot_fields[0].name
     this.pivot_values.forEach(pivot_value => {
       var p_value = pivot_value['data'][pivot_dimension]
       if (p_value !== null) { pivots.push(p_value) }
@@ -1076,30 +1091,40 @@ class VisPluginTableModel {
     subtotals.forEach((subtotal, s) => {
       var modelField = this.measures[subtotal.measure_idx]
       var column = new Column(subtotal.id, this, modelField)
+      column.pivoted = true
+      column.subtotal = true
+      column.pivot_key = [subtotal.pivot, '$$$_subtotal_$$$'].join('|')
 
-      column.levels = [
-        new HeaderField({ vis: this, queryResponseField: {
-          name: this.pivots[0].name,
-          label: subtotal.pivot,
-          view: '',
-        }}),
-        new HeaderField({ vis: this, queryResponseField: {
-          name: 'subtotal',
-          label: 'Subtotal',
-          view: '',
-        }}),
-      ]
+      this.headers.forEach(header => {
+        switch (header.type) {
+          case 'pivot0':
+            column.levels.push(new HeaderField({ vis: this, type: 'pivot', modelField: {
+              name: this.pivot_fields[0].name,
+              label: subtotal.pivot,
+            }}))
+            break
+          case 'pivot1':
+            column.levels.push(new HeaderField({ vis: this, type: 'pivot', modelField: {
+              name: 'subtotal',
+              label: 'Subtotal',
+            }}))
+            break
+          case 'heading':
+            column.levels.push(new HeaderField({ vis: this, type: 'heading', modelField: modelField}))
+            break
+          case 'field':
+            column.levels.push(new HeaderField({ vis: this, type: 'field', modelField: modelField}))
+            break;
+        }
+      })
 
       var pivot_values = column.levels.map(level => level.label)
       column.sort_by_measure_values = [1, subtotal.measure_idx, ...pivot_values]
       pivot_values[pivot_values.length-1] = typeof pivot_values[pivot_values.length-1] == 'string'
         ? pivot_values[pivot_values.length-1] = 'ZZZZ'
         : pivot_values[pivot_values.length-1] = 9999
-
       column.sort_by_pivot_values = [1, ...pivot_values, 10000 + s]
-      column.pivoted = true
-      column.subtotal = true
-      column.pivot_key = [subtotal.pivot, '$$$_subtotal_$$$'].join('|')
+
       this.columns.push(column)
     })
     this.sortColumns()
@@ -1214,20 +1239,32 @@ class VisPluginTableModel {
     column.pivot_key = ''
 
     column.levels = baseline.levels
-    if (this.config.groupVarianceColumns) {
-      if (this.config.sortColumnsBy === 'getSortByPivots') {
+    if (this.groupVarianceColumns) {
+      if (this.config.sortColumnsBy === 'pivots') {
         column.sort_by_pivot_values[0] = 1.5
       }
-      if (baseline.levels.length === 1) {
-        column.levels = [
-          new HeaderField({ vis: this, queryResponseField: { name: 'variance', label: 'Variance' } })
-        ]
-      } else {
-        column.levels = [
-          new HeaderField({ vis: this, queryResponseField: { name: 'variance', label: 'Variance' } }),
-          new HeaderField({ vis: this, queryResponseField: { name: baseline.id, label: baseline.levels[1] } })
-        ]
-      }
+      this.headers.forEach(header => {
+        switch (header.type) {
+          case 'pivot0':
+            column.levels.push(new HeaderField({ vis: this, type: 'pivot', modelField: { 
+              name: 'variance', 
+              label: 'Variance' 
+            }}))
+            break
+          case 'pivot1':
+            column.levels.push(new HeaderField({ vis: this, type: 'pivot', modelField: {
+              name: baseline.id,
+              label: baseline.levels[1],
+            }}))
+            break
+          case 'heading':
+            column.levels.push(new HeaderField({ vis: this, type: 'heading', modelField: modelField}))
+            break
+          case 'field':
+            column.levels.push(new HeaderField({ vis: this, type: 'field', modelField: modelField}))
+            break;
+        }
+      })
     }
 
     this.columns.push(column)
@@ -1280,7 +1317,7 @@ class VisPluginTableModel {
             })
           }
         } else if (variance.type === 'by_pivot') { 
-          if (this.pivots.length === 1 || this.pivots[1].name === variance.comparison) {
+          if (this.pivot_fields.length === 1 || this.pivot_fields[1].name === variance.comparison) {
             this.pivot_values.slice(1).forEach((pivot_value, index) => {
               calcs.forEach(calc => {
                 if (!pivot_value.is_total) {
@@ -1300,7 +1337,7 @@ class VisPluginTableModel {
             var top_level_pivots = []
             this.pivot_values.forEach(pivot_value => {
               if (!pivot_value.is_total) {
-                var value = pivot_value.data[this.pivots[0].name]
+                var value = pivot_value.data[this.pivot_fields[0].name]
                 if (!top_level_pivots.includes(value)) {
                   top_level_pivots.push(value)
                 }
@@ -1350,7 +1387,7 @@ class VisPluginTableModel {
     var compareColSortValues = (a, b) => {
       var param = this.sortColsBy
       var depth = a[param]().length
-      for(var i=0; i<depth; i++) {
+      for(var i = 0; i < depth; i++) {
           if (a[param]()[i] > b[param]()[i]) { return 1 }
           if (a[param]()[i] < b[param]()[i]) { return -1 }
       }
@@ -1361,7 +1398,7 @@ class VisPluginTableModel {
 
   /**
    * 1. Build list of leaves
-   * 2. Build list of tiers
+   * 2. Build list of tiers (and initialise span_tracker)
    * 3. Backwards <--- leaves
    *    4. Check for resets (n/a for colspans)
    *    5. Forwards ---> tiers
@@ -1373,10 +1410,7 @@ class VisPluginTableModel {
     var tiers = []
     var span_values = this.colspan_values
     var span_tracker = {}
-    tiers.forEach(tier => {
-      span_tracker[tier.name] = 1
-    })
-
+    
     // 1)
     var columns = this.columns.filter(c => !c.hide)
 
@@ -1387,9 +1421,14 @@ class VisPluginTableModel {
       }
       leaves.push(leaf)
     })
+    console.log('leaves', leaves)
 
     // 2)
     tiers = this.headers
+    tiers.forEach(tier => {
+      span_tracker[tier.type] = 1
+    })
+    console.log('tiers', tiers)
 
     // 3)
     for (var l = leaves.length - 1; l >= 0; l--) {
@@ -1399,21 +1438,19 @@ class VisPluginTableModel {
       // 5)
       for (var t = 0; t < tiers.length; t++) {
         var tier = tiers[t]
-        var this_tier_value = leaf.data[tier.name]
-        if (l > 0) {
-          var neighbour_value = leaves[l - 1].data[tier.name]
-        }
+        var this_tier_value = leaf.data[tier.type].label
+        var neighbour_value = l > 0 ? leaves[l - 1].data[tier.type].label : null
 
         // 6) 
         if (l > 0 && this_tier_value === neighbour_value) {
-          span_values[leaf.id][tier.name] = -1;
-          span_tracker[tier.name] += 1;
+          span_values[leaf.id][tier.type] = -1;
+          span_tracker[tier.type] += 1;
         } else {
         // 7) 
           for (var t_ = t; t_ < tiers.length; t_++) {
             var tier_ = tiers[t_]
-            span_values[leaf.id][tier_.name] = span_tracker[tier_.name];
-            span_tracker[tier_.name] = 1
+            span_values[leaf.id][tier_.type] = span_tracker[tier_.type];
+            span_tracker[tier_.type] = 1
           }
           break;
         }
@@ -1488,11 +1525,11 @@ class VisPluginTableModel {
       this.transposed_columns.push(transposed_column)
     }
 
-    if (this.sortColsBy === 'getSortByPivots') {
-      this.pivots.forEach(pivot => {
-        var transposed_column = new Column(pivot.name, this, index_parent)
+    if (this.sortColsBy === 'pivots') {
+      this.pivot_fields.forEach(pivot_field => {
+        var transposed_column = new Column(pivot_field.name, this, index_parent)
         transposed_column.levels = newArray(this.transposed_headers.length, new HeaderField({ vis: this, queryResponseField: {} }))
-        transposed_column.levels[0] = new HeaderField({ vis: this, queryResponseField: { name: pivot.name, label: pivot.label } })
+        transposed_column.levels[0] = new HeaderField({ vis: this, queryResponseField: { name: pivot_field.name, label: pivot_field.label } })
         transposed_column.colspans = default_colspan
         this.transposed_columns.push(transposed_column)
       })
@@ -1509,10 +1546,10 @@ class VisPluginTableModel {
       transposed_column.colspans = default_colspan
       this.transposed_columns.push(transposed_column)
 
-      this.pivots.forEach(pivot => {
-        var transposed_column = new Column(pivot.name, this, index_parent)
+      this.pivot_fields.forEach(pivot_field => {
+        var transposed_column = new Column(pivot_field.name, this, index_parent)
         transposed_column.levels = newArray(this.transposed_headers.length, new HeaderField({ vis: this, queryResponseField: {} }))
-        transposed_column.levels[0] = new HeaderField({ vis: this, queryResponseField: { name: pivot.name, label: pivot.label } })
+        transposed_column.levels[0] = new HeaderField({ vis: this, queryResponseField: { name: pivot_field.name, label: pivot_field.label } })
         transposed_column.colspans = default_colspan
         this.transposed_columns.push(transposed_column)
       })
@@ -1579,16 +1616,16 @@ class VisPluginTableModel {
       transposed_data.header = { value: column_heading, cell_style: [] }
       if (column.subtotal) { transposed_data.header.cell_style.push('subtotal') }
 
-      var measure_level = this.sortColsBy === 'getSortByPivots' ? this.pivots.length : 0
+      var measure_level = this.sortColsBy === 'pivots' ? this.pivot_fields.length : 0
       if (this.useHeadings && !this.hasPivots) { measure_level++ } 
 
       transposed_data.measure = { value: column.getLabel(measure_level), cell_style: [] }
       if (column.subtotal) { transposed_data.measure.cell_style.push('subtotal') }
       if (column.modelField.style.includes('subtotal')) { transposed_data.measure.cell_style.push('subtotal') }
       
-      this.pivots.forEach((pivot, idx) => {
-        transposed_data[pivot.name] = { value: column.levels[idx], cell_style: [] }
-        if (column.subtotal) { transposed_data[pivot.name].cell_style.push('subtotal') }
+      this.pivot_fields.forEach((pivot_field, idx) => {
+        transposed_data[pivot_field.name] = { value: column.levels[idx], cell_style: [] }
+        if (column.subtotal) { transposed_data[pivot_field.name].cell_style.push('subtotal') }
       })
 
       var transposed_row = new Row('line_item')
@@ -1712,7 +1749,9 @@ class VisPluginTableModel {
    * Returns an array of 0s, of length to match the required number of header rows
    */
   getHeaderTiers () {    
-    return this.transposeTable ? this.dimensions.filter(d => !d.hide) : this.headers
+    return this.transposeTable
+      ? this.dimensions.filter(d => !d.hide) 
+      : this.headers
   }
 
   /**
@@ -1762,21 +1801,16 @@ class VisPluginTableModel {
    * Builds list of columns out of data set that should be displayed
    * @param {*} i 
    */
-  getTableHeaders (i) {
-    if (!this.transposeTable) {
-      return this.columns.filter(c => {
-        return this.colspan_values[c.id][this.headers[i].name] > 0})
-    } else {
-      return this.transposed_columns.filter(c => c.colspans[i] > 0)
-    }
+  getTableHeaderColumns (i) {
+    return !this.transposeTable
+      ? this.columns.filter(c => !c.hide).filter(c => this.colspan_values[c.id][this.headers[i].type] > 0)
+      : this.transposed_columns.filter(c => c.colspans[i] > 0)
   }
 
   getDataRows () {
-    if (!this.transposeTable) {
-      return this.data
-    } else {
-      return this.transposed_data.filter(row => !row.hide)
-    }
+    return !this.transposeTable
+      ? this.data
+      : this.transposed_data.filter(row => !row.hide)
   }
 
   /**

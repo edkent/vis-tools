@@ -17,7 +17,7 @@ class ModelField {
     this.vis = vis
     this.name = queryResponseField.name
     this.view = queryResponseField.view_label || ''
-    this.label = queryResponseField.label_short || queryResponseField.label
+    this.label = queryResponseField.field_group_variant || queryResponseField.label_short || queryResponseField.label
     this.is_numeric = queryResponseField.is_numeric
     this.is_array = ['list', 'location', 'tier'].includes(queryResponseField.type)
     this.value_format = queryResponseField.value_format
@@ -76,6 +76,15 @@ class ModelDimension extends ModelField {
   }
 }
 
+class ModelPivot extends ModelField {
+  constructor({ vis, queryResponseField }) {
+    super({ vis, queryResponseField })
+
+    this.type = 'pivot'    
+    this.align = 'center'
+  }
+}
+
 class ModelMeasure extends ModelField {
   constructor({ vis, queryResponseField, can_pivot }) {
     super({ vis, queryResponseField })
@@ -91,12 +100,15 @@ class ModelMeasure extends ModelField {
 }
 
 class HeaderField {
-  constructor({ vis, queryResponseField = { name: '', label: '', view: '' }} = { vis, queryResponseField }) {
-    console.log('HeaderField()', vis, queryResponseField.name)
+  constructor({ vis, type, modelField = { name: '', label: '', view: '' }, pivotData = {} } = { vis, type, modelField, pivotData }) {
     this.vis = vis
-    this.name = queryResponseField.name,
-    this.label = queryResponseField.label_short ? queryResponseField.label_short : queryResponseField.label,
-    this.view = queryResponseField.view_label
+    this.type = type
+    
+    this.modelField = modelField
+    // this.name = modelField.name
+    // this.view = modelField.view
+
+    this.pivotData = pivotData
   }
 }
 
@@ -218,7 +230,7 @@ class Column {
 
     var colspan_values = {}
     this.vis.headers.forEach(header => {
-      colspan_values[header.name] = -1
+      colspan_values[header.type] = 1
     })
     this.vis.colspan_values[this.id] = colspan_values
   }
@@ -228,62 +240,47 @@ class Column {
    * @param {*} level
    */
   getLabel (level) {
-    if (this.transposed) {
-      return this.labels[level]
-    }
+    var headerField = this.levels[level]
 
-    if (typeof this.vis.visId !== 'undefined' && this.vis.visId === 'report_table') {
-      switch (this.variance_type) {
-        case 'absolute':
-          var label = 'Var #'
-          break;
-        case 'percentage':
-          var label = 'Var %'
-          break;
-        default:
-          var label = this.vis.useShortName ? this.modelField.short_name || this.modelField.label : this.modelField.label
+    var label = headerField.modelField.label
+
+    var header_setting = this.vis.config['heading|' + headerField.modelField.name]
+    var label_setting = this.vis.config['label|' + headerField.modelField.name]
+
+    if (headerField.type === 'heading') {
+      if (typeof header_setting !== 'undefined') {
+        label = header_setting ? header_setting : headerField.modelField.heading
+      } else {
+        label = headerField.modelField.heading
       }
-    } else {
-      var label = this.modelField.label
-    }
-    
-    var config_setting = this.vis.config['label|' + this.modelField.name]
-    if (typeof config_setting !== 'undefined' && config_setting !== this.modelField.label) {
-      label = config_setting ? config_setting : label
+      return label
     }
 
-    if (typeof this.vis.useViewName !== 'undefined' && this.vis.useViewName) {
-      label = [this.modelField.view, label].join(' ') 
-    }
-    
-    if (typeof this.vis.has_pivots !== 'undefined') {
-      if (this.vis.has_pivots) { 
-        if (this.vis.sortColsBy === 'getSortByPivots') {
-          if (level < this.levels.length) {
-            label = this.levels[level]
-          } else {
-            // label already set
-          }
-        } else { // params.config.sortColumnsBy === 'getSortByMeasures'
-          if (level >= 1) {
-            label = this.levels[level - 1]
-          } else {
-            // label already set
-          }
-        } 
-      } else { // flat table
-        if (this.vis.useHeadings && level === 0) {
-          var config_setting = this.vis.config['heading|' + this.modelField.name]
-          if (typeof config_setting !== 'undefined') {
-            label = config_setting ? config_setting : this.modelField.heading
-          } else {
-            label = this.modelField.heading
-          }
-        } else {
-          // label already set
+    if (headerField.type === 'field') {
+      if (typeof this.vis.visId !== 'undefined' && this.vis.visId === 'report_table') {
+        switch (this.variance_type) {
+          case 'absolute':
+            label = 'Var #'
+            break;
+          case 'percentage':
+            label = 'Var %'
+            break;
+          default:
+            label = this.vis.useShortName
+             ? headerField.modelField.short_name || headerField.modelField.label 
+             : headerField.modelField.label
         }
+      } 
+      
+      if (typeof label_setting !== 'undefined' && label_setting !== this.modelField.label) {
+        label = label_setting ? label_setting : label
+      }
+  
+      if (typeof this.vis.useViewName !== 'undefined' && this.vis.useViewName) {
+        label = [this.modelField.view, label].join(' ') 
       }
     }
+    
     return label
   }
 
@@ -313,9 +310,8 @@ class Column {
 
   getHeaderData () {
     var headerData = {}
-    var levels = this.getHeaderLevels()
     this.modelField.vis.headers.forEach((header, i) => {
-      headerData[header.name] = levels[i]
+      headerData[header.type] = this.levels[i]
     })
 
     return headerData
@@ -340,6 +336,7 @@ class Column {
 
 exports.newArray = newArray
 exports.ModelDimension = ModelDimension
+exports.ModelPivot = ModelPivot
 exports.ModelMeasure = ModelMeasure
 exports.CellSeries = CellSeries
 exports.ColumnSeries = ColumnSeries
