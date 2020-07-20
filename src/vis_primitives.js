@@ -20,7 +20,7 @@ class ModelField {
     this.label = queryResponseField.field_group_variant || queryResponseField.label_short || queryResponseField.label
     this.is_numeric = typeof queryResponseField.is_numeric !== 'undefined' ? queryResponseField.is_numeric : false
     this.is_array = ['list', 'number_list', 'location', 'tier'].includes(queryResponseField.type)
-    this.value_format = queryResponseField.value_format
+    this.value_format = queryResponseField.value_format ? queryResponseField.value_format : ''
 
     this.geo_type = ''
     if (queryResponseField.type === 'location' || queryResponseField.map_layer) {
@@ -99,7 +99,7 @@ class ModelMeasure extends ModelField {
   }
 }
 
-class HeaderField {
+class HeaderCell {
   constructor({ vis, type, modelField = { name: '', label: '', view: '' }, pivotData = {} } = { vis, type, modelField, pivotData }) {
     this.vis = vis
     this.type = type
@@ -177,6 +177,22 @@ class ColumnSeries {
   }
 }
 
+class DataCell {
+  constructor({ value, rendered = null, html = null, links = [], cell_style = [], align = 'right', rowid = '', colid = '', rowspan = 1} = {})
+    {
+      this.value = value
+      this.rendered = rendered
+      this.html = html
+      this.links = links
+      this.cell_style = cell_style
+      this.align = align
+
+      this.rowid = rowid
+      this.colid = colid
+      this.rowspan = rowspan
+    }
+}
+
 /**
  * Represents a row in the dataset that populates the vis.
  * This may be an addtional row (e.g. subtotal) not in the original query
@@ -185,7 +201,7 @@ class ColumnSeries {
 class Row {
   constructor(type = 'line_item') {
     this.id = ''
-    this.modelField = null
+    // this.modelField = null
     this.hide = false
     this.type = type  // line_item | subtotal | total
     this.sort = []    // [ section, subtotal group, row number ]
@@ -340,6 +356,7 @@ exports.ModelPivot = ModelPivot
 exports.ModelMeasure = ModelMeasure
 exports.CellSeries = CellSeries
 exports.ColumnSeries = ColumnSeries
-exports.HeaderField = HeaderField
+exports.HeaderCell = HeaderCell
+exports.DataCell = DataCell
 exports.Row = Row
 exports.Column = Column
