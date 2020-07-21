@@ -105,7 +105,7 @@ const tableModelCoreOptions = {
   groupVarianceColumns: {
     section: "Table",
     type: "boolean",
-    label: "Group Variance Columns After Pivots",
+    label: "Group Variance Columns",
     default: false,
     order: 10,
   },
@@ -175,6 +175,7 @@ class VisPluginTableModel {
     this.spanRows = false || config.spanRows
     this.spanCols = false || config.spanCols
     this.sortColsBy = config.sortColumnsBy || 'getSortByPivots' // matches to Column methods: getSortByPivots(), getSortByMeasures)
+    this.fieldLevel = 0 // set in addPivotsAndHeaders()
     this.groupVarianceColumns = config.groupVarianceColumns || false
 
     this.hasTotals = typeof queryResponse.totals_data !== 'undefined' ? true : false
@@ -397,6 +398,13 @@ class VisPluginTableModel {
     } else {
       this.headers.unshift(...measureHeaders)
     }
+
+    for (var i = 0; i < this.headers.length; i++) {
+      if (!this.headers[i] === 'field') {
+        this.fieldLevel = i
+        break
+      }
+    }
   }
 
   /**
@@ -423,6 +431,7 @@ class VisPluginTableModel {
           case 'pivot1':
             var pivotField = new ModelPivot({ vis: this, queryResponseField: header.modelField })
             var headerCell = new HeaderCell({ column: column, type: 'pivot', modelField: pivotField })
+            if (this.sortColsBy === 'getSortByMeasures') { headerCell.label = '' }
             column.levels.push(headerCell)
             column.sort.push(0)
             break
@@ -492,7 +501,7 @@ class VisPluginTableModel {
               switch (header.type) {
                 case 'pivot0':
                 case 'pivot1':
-                  var label = isRowTotal ? '(row total)' : pivot_value.data[header.modelField.name]
+                  var label = isRowTotal ? '' : pivot_value.data[header.modelField.name]
                   column.levels.push(new HeaderCell({ 
                     column: column, 
                     type: 'pivot', 
@@ -575,7 +584,7 @@ class VisPluginTableModel {
           switch (header.type) {
             case 'pivot0':
             case 'pivot1':
-              column.levels.push(new HeaderCell({ column: column, type: 'pivot', modelField: { label: '(supermeasure)' } }))
+              column.levels.push(new HeaderCell({ column: column, type: 'pivot', modelField: { label: '' } }))
               column.sort.push(1)
               break
             case 'heading':
@@ -1232,6 +1241,7 @@ class VisPluginTableModel {
     var baseline = this.getColumnById(colpair.variance.baseline)
     var comparison = this.getColumnById(colpair.variance.comparison)
     var column = new Column(id, this, baseline.modelField)
+    column.isVariance = true
 
     if (colpair.calc === 'absolute') {
       column.variance_type = 'absolute'
@@ -1256,35 +1266,38 @@ class VisPluginTableModel {
     column.super = baseline.super
     column.pivot_key = ''
 
-    column.levels = baseline.levels
-    if (this.groupVarianceColumns) {
-      if (this.config.sortColumnsBy === 'getSortByPivots') {
+    // console.log('Create Variance Column=====================')
+    // console.log('baseline', baseline)
+    // console.log('baseline.levels[0]', baseline.levels[0])
+    // console.log('baseline.levels[0].label', baseline.levels[0].label)
+
+    // var types = ['pivot0', 'pivot1', 'header', 'field']
+    // types.forEach(type => {
+    //   console.log('label by type', type, baseline.getHeaderCellLabelByType(type))
+    // })
+
+    if (this.groupVarianceColumns) {    
         column.sort[0] = 1.5
-        column.sort_by_pivot_values[0] = 1.5
-      }
-      this.headers.forEach(header => {
-        switch (header.type) {
-          case 'pivot0':
-            column.levels.push(new HeaderCell({ column: column, type: 'pivot', modelField: { 
-              name: 'variance', 
-              label: 'Variance' 
-            }}))
-            break
-          case 'pivot1':
-            column.levels.push(new HeaderCell({ column: column, type: 'pivot', modelField: {
-              name: baseline.id,
-              label: baseline.levels[1],
-            }}))
-            break
-          case 'heading':
-            column.levels.push(new HeaderCell({ column: column, type: 'heading', modelField: modelField}))
-            break
-          case 'field':
-            column.levels.push(new HeaderCell({ column: column, type: 'field', modelField: modelField}))
-            break;
-        }
-      })
     }
+
+    this.headers.forEach((header, i) => {
+      switch (header.type) {
+        case 'pivot0':
+        case 'pivot1':
+          var label = baseline.getHeaderCellLabelByType(header.type)
+          var headerCell = new HeaderCell({ column: column, type: 'pivot', modelField: { label: label } })
+          column.levels[i] = headerCell
+          break
+        case 'heading':
+          var headerCell = new HeaderCell({ column: column, type: 'heading', modelField: baseline.modelField })
+          column.levels[i] = headerCell
+          break
+        case 'field':
+          var headerCell = new HeaderCell({ column: column, type: 'field', modelField: baseline.modelField })
+          column.levels[i] = headerCell
+          break;
+      }
+    })
 
     this.columns.push(column)
     if (colpair.variance.reverse) {

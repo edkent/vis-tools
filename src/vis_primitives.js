@@ -104,10 +104,10 @@ class HeaderCell {
     this.id = [column.id, type].join('.')
     this.column = column
     this.type = type
-    this.label = label
     this.colspan = 1
     this.headerRow = true
     this.cell_style = ['headerCell']
+    this.label = label
 
     if (this.column.modelField.type === 'dimension') {
       if (type === 'pivot') {
@@ -118,7 +118,7 @@ class HeaderCell {
         this.align = modelField.align || 'left'
       }
     } else if (this.column.modelField.type === 'measure') {
-      if (type === 'field') {
+      if (type === 'field' && (column.vis.pivot_fields.length === 0 || column.vis.sortColsBy === 'getSortByPivots' )) {
         this.align = modelField.align || 'right'
       } else {
         this.align = 'center'
@@ -255,7 +255,8 @@ class Column {
 
     this.unit = modelField.unit || ''
     this.hide = modelField.hide || false
-    this.variance_type = '' // empty | absolute | percentage
+    this.isVariance = false
+    this.variance_type = null
     this.pivoted = false
     this.isRowTotal = false
     this.super = false
@@ -285,7 +286,6 @@ class Column {
       var label = headerCell.label
     } else {
       var label = headerCell.modelField.label
-
       var header_setting = this.vis.config['heading|' + headerCell.modelField.name]
       var label_setting = this.vis.config['label|' + headerCell.modelField.name]
 
@@ -299,27 +299,38 @@ class Column {
       }
 
       if (headerCell.type === 'field') {
-        if (typeof this.vis.visId !== 'undefined' && this.vis.visId === 'report_table') {
-          switch (this.variance_type) {
-            case 'absolute':
-              label = 'Var #'
-              break;
-            case 'percentage':
-              label = 'Var %'
-              break;
-            default:
-              label = this.vis.useShortName
-              ? headerCell.modelField.short_name || headerCell.modelField.label 
-              : headerCell.modelField.label
-          }
-        } 
+        label = this.vis.useShortName
+          ? headerCell.modelField.short_name || headerCell.modelField.label 
+          : headerCell.modelField.label
         
         if (typeof label_setting !== 'undefined' && label_setting !== this.modelField.label) {
           label = label_setting ? label_setting : label
         }
+
+        if (this.isVariance) {
+          if (this.vis.groupVarianceColumns) {
+            if (this.vis.pivot_values.length === 2) {
+              label = this.variance_type === 'absolute' ? label + ' #' : label + ' %'
+            } else {
+              label = this.variance_type === 'absolute' ? label + ' Var #' : label + ' Var %'
+            }
+          } else {
+            label = this.variance_type === 'absolute' ? 'Var #' : 'Var %'
+          }
+        }
     
         if (typeof this.vis.useViewName !== 'undefined' && this.vis.useViewName) {
           label = [this.modelField.view, label].join(' ') 
+        }
+      }
+
+      if (headerCell.type === 'pivot') {
+        if (this.isVariance && this.vis.groupVarianceColumns) {
+          if (this.vis.pivot_values.length === 2) {
+            label = 'Variance'
+          } else {
+            label = 'Var ' + label
+          }
         }
       }
     }
@@ -327,35 +338,20 @@ class Column {
     return label
   }
 
+  getHeaderCellLabelByType (type) {
+    for (var i = 0; i < this.vis.headers.length; i++) {
+      if (type === this.vis.headers[i].type) {
+        return this.getHeaderCellLabel(i)
+      }
+    }
+    return null
+  }
+
   setHeaderCellLabels () {
     this.levels.forEach((level, i) => {
       level.label = level.label === null ? this.getHeaderCellLabel(i) : level.label
     })
   }
-
-  /***
-   * Returns array of all header fields per column
-   * 1. Combine pivot values with measure label, in order set by sortColsBy option
-   * 2. Add headings if used (option chosen, flat tables only)
-   */
-  // getHeaderLevels () {
-  //   if (this.modelField.vis.sortColsBy === 'getSortByPivots') {
-  //     var header_levels = [...this.levels, this.getHeaderCellLabel(this.levels.length)]
-  //   } else {
-  //     var header_levels = [this.getHeaderCellLabel(0), ...this.levels]
-  //   }
-
-  //   if (this.modelField.vis.useHeadings && !this.modelField.vis.has_pivots) {
-  //     var column_heading = this.modelField.heading
-  //     var config_setting = this.modelField.vis.config['heading|' + this.modelField.name]
-  //     if (typeof config_setting !== 'undefined') {
-  //       column_heading = config_setting ? config_setting : column_heading
-  //     } 
-  //     header_levels.unshift(column_heading)
-  //   }
-
-  //   return header_levels
-  // }
 
   getHeaderData () {
     var headerData = {}
@@ -365,22 +361,6 @@ class Column {
 
     return headerData
   }
-
-  // updateSortByMeasures (idx) {
-  //   if (this.sort_by_measure_values[0] == 1) {
-  //     if (!this.pivoted && !this.subtotal) {
-  //       this.sort_by_measure_values = [1, idx]
-  //     }
-  //   }
-  // }
-
-  // getSortByMeasures () {
-  //   return this.sort_by_measure_values
-  // }
-
-  // getSortByPivots () {
-  //   return this.sort_by_pivot_values
-  // }
 }
 
 exports.newArray = newArray
