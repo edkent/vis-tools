@@ -207,16 +207,18 @@ class VisPluginTableModel {
 
     // this.addColumnSeries()    // TODO: add column series for generated columns (eg column subtotals)
     this.sortColumns()
+    this.columns.forEach(column => column.setHeaderCellLabels())
     if (this.spanCols) { this.setColSpans() }
     this.applyFormatting()
 
+    if (this.transposeTable) { 
+      this.transposeDimensionsIntoHeaders()
+      this.transposeRowsIntoColumns() 
+      this.transposeColumnsIntoRows()
+    }
+
     console.log('Table in progress:', this)
     return
-
-    if (this.transposeTable) { 
-      this.transposeColumns() 
-      this.transposeRows()
-    }
 
     this.validateConfig()
     // this.getTableColumnGroups() 
@@ -1297,16 +1299,6 @@ class VisPluginTableModel {
     column.super = baseline.super
     column.pivot_key = ''
 
-    // console.log('Create Variance Column=====================')
-    // console.log('baseline', baseline)
-    // console.log('baseline.levels[0]', baseline.levels[0])
-    // console.log('baseline.levels[0].label', baseline.levels[0].label)
-
-    // var types = ['pivot0', 'pivot1', 'header', 'field']
-    // types.forEach(type => {
-    //   console.log('label by type', type, baseline.getHeaderCellLabelByType(type))
-    // })
-
     if (this.groupVarianceColumns) {    
         column.sort[0] = 1.5
     }
@@ -1492,21 +1484,18 @@ class VisPluginTableModel {
     var columns = this.columns.filter(c => !c.hide)
 
     columns.forEach(column => {
-      column.setHeaderCellLabels()
       var leaf = {
         id: column.id,
         data: column.getHeaderData()
       }
       leaves.push(leaf)
     })
-    console.log('leaves', leaves)
 
     // 2)
     tiers = this.headers
     tiers.forEach(tier => {
       span_tracker[tier.type] = 1
     })
-    console.log('tiers', tiers)
 
     // 3)
     for (var l = leaves.length - 1; l >= 0; l--) {
@@ -1564,148 +1553,122 @@ class VisPluginTableModel {
     })
   }
 
-  /**
-   * For rendering a transposed table i.e. with the list of measures on the left hand side
-   * 1. If used, add the 'header' column
-   * 2. Depending on column sort order, add pivot fields then a measure column (or vice versa) 
-   * 3. Add a transposed column for every data row
-   */
-  transposeColumns () {
+  transposeDimensionsIntoHeaders () {
     this.transposed_headers = this.columns
       .filter(c => c.modelField.type !== 'measure')
       .filter(c => !c.hide)
-      .map(c => new HeaderCell({ column: c, queryResponseField: c.modelField }))
-    
+      .map(c => { return { type: 'field', modelField: c.modelField } })
+
+    console.log('transposed_headers', this.transposed_headers)
+  }
+
+  /**
+   * For rendering a transposed table i.e. with the list of measures on the left hand side
+   * 1. Add an index column per header
+   * 2. Add a transposed column for every data row
+   */
+  transposeRowsIntoColumns () {
     var default_colspan = this.transposed_headers
       .map(header => {
         var colspans = {}
-        colspans[header.name] = 1
+        colspans[header.modelField.name] = 1
       })
+    console.log('default_colspan', default_colspan)
 
     var index_parent = {
       align: 'left',
       type: 'transposed_table_index',
       is_table_calculation: false
     }
+
+    // One "index column" per header row from original table
+    this.headers.forEach(header => {
+      var column = new Column(header.type, this, index_parent)
+
+      this.transposed_headers.forEach(header => {
+        var headerCell = new HeaderCell({ column: column, type: header.type, label: header.modelField.label, modelField: header.modelField })
+        column.levels.push(headerCell)
+      })
+      // transposed_column.levels[0] = new HeaderCell({ column: transposed_column, queryResponseField: { name: pivot_field.name, label: pivot_field.label } })
+      this.transposed_columns.push(column)
+    })
+
+    console.log('this.transposed_columns, index cols only so far', this.transposed_columns)
+    
     var measure_parent = {
       align: 'right',
       type: 'transposed_table_measure',
       is_table_calculation: false
     }
-
-    // Single header column, if useHeadings
-    if (this.useHeadings && !this.hasPivots) {
-      var transposed_column = new Column('header', this, index_parent)
-      transposed_column.levels = newArray(this.transposed_headers.length, new HeaderCell({ column: transposed_column, queryResponseField: {} }))
-      transposed_column.levels[0] = new HeaderCell({ column: transposed_column, queryResponseField: { name: 'header', label: 'Header' } })
-      transposed_column.colspans = default_colspan
-      transposed_column.type = 'dimension'
-      this.transposed_columns.push(transposed_column)
-    }
-
-    if (this.sortColsBy === 'getSortByPivots') {
-      this.pivot_fields.forEach(pivot_field => {
-        var transposed_column = new Column(pivot_field.name, this, index_parent)
-        transposed_column.levels = newArray(this.transposed_headers.length, new HeaderCell({ column: transposed_column, queryResponseField: {} }))
-        transposed_column.levels[0] = new HeaderCell({ column: transposed_column, queryResponseField: { name: pivot_field.name, label: pivot_field.label } })
-        transposed_column.colspans = default_colspan
-        this.transposed_columns.push(transposed_column)
-      })
-
-      var transposed_column = new Column('measure', this, index_parent)
-      transposed_column.levels = newArray(this.transposed_headers.length, new HeaderCell({ column: transposed_column, queryResponseField: {} }))
-      transposed_column.levels[0] = new HeaderCell({ column: transposed_column, queryResponseField: { name: 'measure', label: 'Measure' } })
-      transposed_column.colspans = default_colspan
-      this.transposed_columns.push(transposed_column)
-    } else {
-      var transposed_column = new Column('measure', this, index_parent)
-      transposed_column.levels = newArray(this.transposed_headers.length, new HeaderCell({ column: transposed_column, queryResponseField: {} }))
-      transposed_column.levels[0] = new HeaderCell({ column: transposed_column, queryResponseField: { name: 'measure', label: 'Measure' } })
-      transposed_column.colspans = default_colspan
-      this.transposed_columns.push(transposed_column)
-
-      this.pivot_fields.forEach(pivot_field => {
-        var transposed_column = new Column(pivot_field.name, this, index_parent)
-        transposed_column.levels = newArray(this.transposed_headers.length, new HeaderCell({ column: transposed_column, queryResponseField: {} }))
-        transposed_column.levels[0] = new HeaderCell({ column: transposed_column, queryResponseField: { name: pivot_field.name, label: pivot_field.label } })
-        transposed_column.colspans = default_colspan
-        this.transposed_columns.push(transposed_column)
-      })
-    }
-    
-
-    var transposed_column = new Column(sourceRow.id, this, measure_parent)
-
+  
+    // One column per data row (line items, subtotals, totals)
     for (var h = 0; h < this.data.length; h++) {
       var sourceRow = this.data[h]
+      var transposedColumn = new Column(sourceRow.id, this, measure_parent)
+
       if (sourceRow.type === 'line_item') {
         var colspan_values = {}
         var levels = []
         this.transposed_headers.forEach(header => {
           colspan_values = this.rowspan_values[sourceRow.id]
-          levels.push(sourceRow.data[header.name].value)
+          levels.push(sourceRow.data[header.modelField.name].value)
         })
       } else if (sourceRow.type === 'subtotal') {
         var colspan_values = default_colspan
-        var levels = newArray(this.transposed_headers.length, new HeaderCell({ column: transposed_column, queryResponseField: {} }))
-        levels[0] = new HeaderCell({ column: transposed_column, queryResponseField: {
-          name: 'subtotal',
-          label: 'Subtotal'
-        }})
+        var levels = newArray(this.transposed_headers.length, new HeaderCell({ column: transposedColumn, type: 'total', modelField: {} }))
       } else if (sourceRow.type === 'total') {
         var colspan_values = default_colspan
-        var levels = newArray(this.transposed_headers.length, new HeaderCell({ column: transposed_column, queryResponseField: {} }))
-        levels[0] = new HeaderCell({ column: transposed_column, queryResponseField: {
-          name: 'total',
-          label: 'Total'
-        }})
+        var levels = newArray(this.transposed_headers.length, new HeaderCell({ column: transposedColumn, type: 'total', modelField: {} }))
       }
 
-      transposed_column.transposed = true
-      transposed_column.colspan_values = colspan_values
-      transposed_column.levels = levels
-      this.transposed_columns.push(transposed_column)
+      transposedColumn.transposed = true
+      transposedColumn.colspan_values = colspan_values
+      transposedColumn.levels = levels
+      this.transposed_columns.push(transposedColumn)
     }
   }
 
-  transposeRows () {
+  transposeColumnsIntoRows () { 
     this.columns.filter(c => c.modelField.type === 'measure').forEach(column => {
       var transposed_data = {}
 
-      // MEASURE FIELDS
+      // MEASURE FIELDS // every measure column in original table is converted to a data row
       this.data.forEach(row => {
         if (typeof row.data[column.id] !== 'undefined') {
           transposed_data[row.id] = row.data[column.id]
-          transposed_data[row.id]['align'] = 'right'
-          if (typeof transposed_data[row.id]['cell_style'] !== 'undefined') {
-            transposed_data[row.id]['cell_style'].push('transposed')
-          } else {
-            transposed_data[row.id]['cell_style'] = ['transposed']
-          }
+          transposed_data[row.id]['align'] = column.modelField.align
+          transposed_data[row.id]['cell_style'].push('transposed')
         } else {
           console.log('row data does not exist for', column.id)
         }
       })
 
-      // INDEX FIELDS (header, pivot values, measure name)
-      var column_heading = column.modelField.heading
-      var config_setting = this.config['heading|' + column.modelField.name]
-      if (typeof config_setting !== 'undefined') {
-        column_heading = config_setting ? config_setting : column_heading
-      } 
-      transposed_data.header = { value: column_heading, cell_style: [] }
-      if (column.subtotal) { transposed_data.header.cell_style.push('subtotal') }
+      // INDEX FIELDS // every index/dimension column in origianl table must be represented as a data cell in the new transposed rows
 
-      var measure_level = this.sortColsBy === 'getSortByPivots' ? this.pivot_fields.length : 0
-      if (this.useHeadings && !this.hasPivots) { measure_level++ } 
-
-      transposed_data.measure = { value: column.getHeaderCellLabel(measure_level), cell_style: [] }
-      if (column.subtotal) { transposed_data.measure.cell_style.push('subtotal') }
-      if (column.modelField.style.includes('subtotal')) { transposed_data.measure.cell_style.push('subtotal') }
-      
-      this.pivot_fields.forEach((pivot_field, idx) => {
-        transposed_data[pivot_field.name] = { value: column.levels[idx], cell_style: [] }
-        if (column.subtotal) { transposed_data[pivot_field.name].cell_style.push('subtotal') }
+      this.headers.forEach((header, i) => {
+        switch (header.type) {
+          case 'pivot0':
+            var cell = new DataCell({ value: column.levels[i].label, rendered: column.levels[i].label })
+            if (column.subtotal) { cell.cell_style.push('subtotal') }
+            transposed_data['pivot0'] = cell
+            break
+          case 'pivot1':
+            var cell = new DataCell({ value: column.levels[i].label, rendered: column.levels[i].label })
+            if (column.subtotal) { cell.cell_style.push('subtotal') }
+            transposed_data['pivot1'] = cell
+            break
+          case 'heading':
+            var cell = new DataCell({ value: column.levels[i].label, rendered: column.levels[i].label })
+            if (column.subtotal) { cell.cell_style.push('subtotal') }
+            transposed_data['heading'] = cell
+            break
+          case 'field':
+            var cell = new DataCell({ value: column.levels[i].label, rendered: column.levels[i].label })
+            if (column.subtotal) { cell.cell_style.push('subtotal') }
+            if (column.modelField.style.includes('subtotal')) { cell.cell_style.push('subtotal') }
+            transposed_data['field'] = cell
+            break
+        }
       })
 
       var transposed_row = new Row('line_item')
@@ -1715,6 +1678,7 @@ class VisPluginTableModel {
       transposed_row.data = transposed_data
 
       this.transposed_data.push(transposed_row)
+
     })
   }
 
@@ -1810,9 +1774,9 @@ class VisPluginTableModel {
    * Returns an array of 0s, of length to match the required number of header rows
    */
   getHeaderTiers () {    
-    return this.transposeTable
-      ? this.dimensions.filter(d => !d.hide) 
-      : this.headers
+    return !this.transposeTable
+      ? this.headers
+      : this.transposed_headers 
   }
 
   /**
@@ -1826,7 +1790,7 @@ class VisPluginTableModel {
           .filter(c => !c.hide)
           .filter(c => this.colspan_values[c.id][this.headers[i].type] > 0)
       : this.transposed_columns
-          .filter(c => c.colspans[i] > 0)
+          .filter(c => c.levels[i].colspan > 0)
   }
 
   getDataRows () {
@@ -1848,14 +1812,14 @@ class VisPluginTableModel {
 
     } else {
       var cells = this.transposed_columns
-      cells.forEach((cell, idx) => {
-        if (cell.modelField.type === 'transposed_table_index') {
-          cell.rowspan = this.colspan_values[row.id][this.headers[idx].name]
-        }
-      })
-
-      cells = cells
         .filter(cell => cell.rowspan > 0)
+
+      // cells.forEach((cell, idx) => {
+      //   if (cell.modelField.type === 'transposed_table_index') {
+      //     cell.rowspan = this.colspan_values[row.id][this.headers[idx].name]
+      //   }
+      // })
+
     }
     return cells    
   }
