@@ -100,15 +100,38 @@ class ModelMeasure extends ModelField {
 }
 
 class HeaderCell {
-  constructor({ vis, type, modelField = { name: '', label: '', view: '' }, pivotData = {} } = { vis, type, modelField, pivotData }) {
-    this.vis = vis
+  constructor({ column, type, label = null, align = 'center', modelField = { name: '', label: '', view: '' }, pivotData = {} } = { column, type, label, align, modelField, pivotData }) {
+    this.id = [column.id, type].join('.')
+    this.column = column
     this.type = type
-    
-    this.modelField = modelField
-    // this.name = modelField.name
-    // this.view = modelField.view
+    this.label = label
+    this.colspan = 1
+    this.headerRow = true
+    this.cell_style = ['headerCell']
 
+    if (this.column.modelField.type === 'dimension') {
+      if (type === 'pivot') {
+        this.align = 'right'
+      } else if (type === 'heading') {
+        this.align = 'center'
+      } else {
+        this.align = modelField.align || 'left'
+      }
+    } else if (this.column.modelField.type === 'measure') {
+      if (type === 'field') {
+        this.align = modelField.align || 'right'
+      } else {
+        this.align = 'center'
+      }
+    } else {
+      this.align = align
+    }
+
+    this.modelField = modelField
     this.pivotData = pivotData
+
+    if (modelField.type) { this.cell_style.push(modelField.type)}
+    if (modelField.is_table_calculation) { this.cell_style.push('calculation')}
   }
 }
 
@@ -234,14 +257,14 @@ class Column {
     this.hide = modelField.hide || false
     this.variance_type = '' // empty | absolute | percentage
     this.pivoted = false
-    this.subtotal = false
+    this.isRowTotal = false
     this.super = false
-
-    this.series = null
+    this.subtotal = false
+    this.subtotal_data = {}
     
-    this.sort_by_measure_values = [] // [index -1|dimension 0|measure 1|row totals & supermeasures 2, column number, [measure values]  ]
-    this.sort_by_pivot_values = []   // [index -1|dimension 0|measure 1|row totals & supermeasures 2, [pivot values], column number    ]
+    this.series = null
 
+    this.sort = []
     this.colspans = []
 
     var colspan_values = {}
@@ -255,49 +278,59 @@ class Column {
    * Returns a header label for a column, to display in table vis
    * @param {*} level
    */
-  getLabel (level) {
-    var headerField = this.levels[level]
+  getHeaderCellLabel (level) {
+    var headerCell = this.levels[level]
 
-    var label = headerField.modelField.label
+    if (headerCell.label !== null) {
+      var label = headerCell.label
+    } else {
+      var label = headerCell.modelField.label
 
-    var header_setting = this.vis.config['heading|' + headerField.modelField.name]
-    var label_setting = this.vis.config['label|' + headerField.modelField.name]
+      var header_setting = this.vis.config['heading|' + headerCell.modelField.name]
+      var label_setting = this.vis.config['label|' + headerCell.modelField.name]
 
-    if (headerField.type === 'heading') {
-      if (typeof header_setting !== 'undefined') {
-        label = header_setting ? header_setting : headerField.modelField.heading
-      } else {
-        label = headerField.modelField.heading
-      }
-      return label
-    }
-
-    if (headerField.type === 'field') {
-      if (typeof this.vis.visId !== 'undefined' && this.vis.visId === 'report_table') {
-        switch (this.variance_type) {
-          case 'absolute':
-            label = 'Var #'
-            break;
-          case 'percentage':
-            label = 'Var %'
-            break;
-          default:
-            label = this.vis.useShortName
-             ? headerField.modelField.short_name || headerField.modelField.label 
-             : headerField.modelField.label
+      if (headerCell.type === 'heading') {
+        if (typeof header_setting !== 'undefined') {
+          label = header_setting ? header_setting : headerCell.modelField.heading
+        } else {
+          label = headerCell.modelField.heading
         }
-      } 
-      
-      if (typeof label_setting !== 'undefined' && label_setting !== this.modelField.label) {
-        label = label_setting ? label_setting : label
+        return label
       }
-  
-      if (typeof this.vis.useViewName !== 'undefined' && this.vis.useViewName) {
-        label = [this.modelField.view, label].join(' ') 
+
+      if (headerCell.type === 'field') {
+        if (typeof this.vis.visId !== 'undefined' && this.vis.visId === 'report_table') {
+          switch (this.variance_type) {
+            case 'absolute':
+              label = 'Var #'
+              break;
+            case 'percentage':
+              label = 'Var %'
+              break;
+            default:
+              label = this.vis.useShortName
+              ? headerCell.modelField.short_name || headerCell.modelField.label 
+              : headerCell.modelField.label
+          }
+        } 
+        
+        if (typeof label_setting !== 'undefined' && label_setting !== this.modelField.label) {
+          label = label_setting ? label_setting : label
+        }
+    
+        if (typeof this.vis.useViewName !== 'undefined' && this.vis.useViewName) {
+          label = [this.modelField.view, label].join(' ') 
+        }
       }
     }
-    
+
     return label
+  }
+
+  setHeaderCellLabels () {
+    this.levels.forEach((level, i) => {
+      level.label = level.label === null ? this.getHeaderCellLabel(i) : level.label
+    })
   }
 
   /***
@@ -305,24 +338,24 @@ class Column {
    * 1. Combine pivot values with measure label, in order set by sortColsBy option
    * 2. Add headings if used (option chosen, flat tables only)
    */
-  getHeaderLevels () {
-    if (this.modelField.vis.sortColsBy === 'getSortByPivots') {
-      var header_levels = [...this.levels, this.getLabel(this.levels.length)]
-    } else {
-      var header_levels = [this.getLabel(0), ...this.levels]
-    }
+  // getHeaderLevels () {
+  //   if (this.modelField.vis.sortColsBy === 'getSortByPivots') {
+  //     var header_levels = [...this.levels, this.getHeaderCellLabel(this.levels.length)]
+  //   } else {
+  //     var header_levels = [this.getHeaderCellLabel(0), ...this.levels]
+  //   }
 
-    if (this.modelField.vis.useHeadings && !this.modelField.vis.has_pivots) {
-      var column_heading = this.modelField.heading
-      var config_setting = this.modelField.vis.config['heading|' + this.modelField.name]
-      if (typeof config_setting !== 'undefined') {
-        column_heading = config_setting ? config_setting : column_heading
-      } 
-      header_levels.unshift(column_heading)
-    }
+  //   if (this.modelField.vis.useHeadings && !this.modelField.vis.has_pivots) {
+  //     var column_heading = this.modelField.heading
+  //     var config_setting = this.modelField.vis.config['heading|' + this.modelField.name]
+  //     if (typeof config_setting !== 'undefined') {
+  //       column_heading = config_setting ? config_setting : column_heading
+  //     } 
+  //     header_levels.unshift(column_heading)
+  //   }
 
-    return header_levels
-  }
+  //   return header_levels
+  // }
 
   getHeaderData () {
     var headerData = {}
@@ -333,21 +366,21 @@ class Column {
     return headerData
   }
 
-  updateSortByMeasures (idx) {
-    if (this.sort_by_measure_values[0] == 1) {
-      if (!this.pivoted && !this.subtotal) {
-        this.sort_by_measure_values = [1, idx]
-      }
-    }
-  }
+  // updateSortByMeasures (idx) {
+  //   if (this.sort_by_measure_values[0] == 1) {
+  //     if (!this.pivoted && !this.subtotal) {
+  //       this.sort_by_measure_values = [1, idx]
+  //     }
+  //   }
+  // }
 
-  getSortByMeasures () {
-    return this.sort_by_measure_values
-  }
+  // getSortByMeasures () {
+  //   return this.sort_by_measure_values
+  // }
 
-  getSortByPivots () {
-    return this.sort_by_pivot_values
-  }
+  // getSortByPivots () {
+  //   return this.sort_by_pivot_values
+  // }
 }
 
 exports.newArray = newArray
