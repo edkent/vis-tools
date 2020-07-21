@@ -201,7 +201,7 @@ class ColumnSeries {
 }
 
 class DataCell {
-  constructor({ value, rendered = null, html = null, links = [], cell_style = [], align = 'right', rowid = '', colid = '', rowspan = 1} = {})
+  constructor({ value, rendered = null, html = null, links = [], cell_style = [], align = 'right', rowid = '', colid = '', rowspan = 1, colspan = 1} = {})
     {
       this.value = value
       this.rendered = rendered
@@ -213,6 +213,7 @@ class DataCell {
       this.rowid = rowid
       this.colid = colid
       this.rowspan = rowspan
+      this.colspan = colspan
     }
 }
 

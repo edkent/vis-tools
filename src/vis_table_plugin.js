@@ -502,6 +502,9 @@ class VisPluginTableModel {
                 case 'pivot0':
                 case 'pivot1':
                   var label = isRowTotal ? '' : pivot_value.data[header.modelField.name]
+                  if (isRowTotal && header.type === 'pivot' + (this.pivot_fields.length - 1)) {
+                    label = 'Row Total'
+                  }
                   column.levels.push(new HeaderCell({ 
                     column: column, 
                     type: 'pivot', 
@@ -664,9 +667,11 @@ class VisPluginTableModel {
       switch (header.type) {
         case 'pivot0':
         case 'pivot1':
-          var pivot_field = new ModelPivot({ vis: this, queryResponseField: header.modelField })
-          column.levels.push(new HeaderCell({ column: column, type: 'pivot', modelField: pivot_field }))
-          index_column.sort.push(0)
+          var pivotField = new ModelPivot({ vis: this, queryResponseField: header.modelField })
+          var headerCell = new HeaderCell({ column: column, type: 'pivot', modelField: pivotField })
+          if (this.sortColsBy === 'getSortByMeasures') { headerCell.label = '' }
+          column.levels.push(headerCell)
+          column.sort.push(0)
           break
         case 'heading':
           column.levels.push(new HeaderCell({ column: column, type: 'heading', modelField: dimension }))
@@ -819,7 +824,20 @@ class VisPluginTableModel {
 
     this.columns.forEach(column => {
       totalsRow.id = 'Total'
-      totalsRow.data[column.id] = new DataCell({ value: '', cell_style: ['total'] })
+
+      if (column.modelField.type === 'dimension') {
+        if ([this.firstVisibleDimension, '$$$_index_$$$'].includes(column.id)) {
+          var rowspan = 1
+          var colspan = this.useIndexColumn ? 1 : this.dimensions.filter(d => !d.hide).length
+        } else {
+          var rowspan = -1
+          var colspan = -1
+        }
+      } else {
+        var rowspan = 1
+        var colspan = 1
+      }
+      totalsRow.data[column.id] = new DataCell({ value: '', cell_style: ['total'], rowspan: rowspan, colspan: colspan })
       
       if (column.modelField.type === 'measure') {
         var cellValue = (column.pivoted || column.isRowTotal) ? totals_[column.modelField.name][column.pivot_key] : totals_[column.id]
@@ -842,6 +860,7 @@ class VisPluginTableModel {
     if (this.useIndexColumn) {
       totalsRow.data['$$$_index_$$$'].value = 'TOTAL'
       totalsRow.data['$$$_index_$$$'].align = 'left'
+      totalsRow.data['$$$_index_$$$'].colspan = this.dimensions.filter(d => !d.hide).length
     } else {
       if (this.firstVisibleDimension) {
         totalsRow.data[this.firstVisibleDimension].value = 'TOTAL'
@@ -1014,7 +1033,14 @@ class VisPluginTableModel {
 
       this.columns.forEach(column => {
         if (column.modelField.type === 'dimension') {
-          var cell = new DataCell({ 'cell_style': ['total', 'subtotal'], align: 'left' })
+          if ([this.firstVisibleDimension, '$$$_index_$$$'].includes(column.id)) {
+            var rowspan = 1
+            var colspan = this.useIndexColumn ? 1 : this.dimensions.filter(d => !d.hide).length
+          } else {
+            var rowspan = -1
+            var colspan = -1
+          }
+          var cell = new DataCell({ 'cell_style': ['total', 'subtotal'], align: 'left', rowspan: rowspan, colspan: colspan })
           if (column.id === '$$$_index_$$$' || column.id === this.firstVisibleDimension ) {
             cell.value = subTotalGroup.join(' | ') ? subTotalGroup.join(' | ') : 'Others'
             cell.rendered = cell.value
