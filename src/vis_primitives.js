@@ -214,6 +214,8 @@ class DataCell {
       this.colid = colid
       this.rowspan = rowspan
       this.colspan = colspan
+
+      this.cell_style.push('rowCell')
     }
 }
 

@@ -974,6 +974,7 @@ class VisPluginTableModel {
         if (l > 0 && this_tier_value === neighbour_value) {
           span_values[leaf.id][tier.name] = -1
           leaf.data[tier.name].rowspan = -1
+          leaf.data[tier.name].colspan = -1
           span_tracker[tier.name] += 1
         } else {
         // Different: set span_value from span_tracker. Partial reset and continue
@@ -1490,6 +1491,10 @@ class VisPluginTableModel {
       }
       leaves.push(leaf)
     })
+    // console.log('setColSpans() leaves', leaves)
+    // console.log('Can these leaves be replaced by / are they already just references to the column headers / levels themselves?')
+    // console.log('That would be closed to the setRowSpans function, enabling colspan to be stored within the cell')
+    // console.log('That would be useful to a) use same pattern for transposing rows & cells, b) enabling a rowspan function on the totals column header, c) reducing the link between report_table.js and vis_tabl_plugin.js')
 
     // 2)
     tiers = this.headers
@@ -1511,12 +1516,15 @@ class VisPluginTableModel {
         // 6) 
         if (l > 0 && this_tier_value === neighbour_value) {
           span_values[leaf.id][tier.type] = -1;
+          leaf.data[tier.type].colspan = -1
+          leaf.data[tier.type].rowspan = -1
           span_tracker[tier.type] += 1;
         } else {
         // 7) 
           for (var t_ = t; t_ < tiers.length; t_++) {
             var tier_ = tiers[t_]
             span_values[leaf.id][tier_.type] = span_tracker[tier_.type];
+            leaf.data[tier_.type].colspan = span_tracker[tier_.type]
             span_tracker[tier_.type] = 1
           }
           break;
@@ -1526,11 +1534,11 @@ class VisPluginTableModel {
 
     // row spans are set against the cell values (can be many individual cells)
     // col spans are set against the Column object (can only be a few headers)
-    this.columns.forEach(column => {
-      if (typeof span_values[column.id] !== 'undefined') {
-        column.colspans = span_values[column.id]
-      }
-    })
+    // this.columns.forEach(column => {
+    //   if (typeof span_values[column.id] !== 'undefined') {
+    //     column.colspans = span_values[column.id]
+    //   }
+    // })
   }
 
   /**
