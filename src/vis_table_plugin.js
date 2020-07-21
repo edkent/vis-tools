@@ -744,6 +744,10 @@ class VisPluginTableModel {
           cell.align = 'left'
         }
 
+        if (column.modelField.type === 'measure') {
+          cell.cell_style.push('measure')
+        }
+
         if (typeof column.modelField.style !== 'undefined') {
           cell.cell_style = cell.cell_style.concat(column.modelField.style)
         }
