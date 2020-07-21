@@ -208,9 +208,10 @@ class VisPluginTableModel {
     // this.addColumnSeries()    // TODO: add column series for generated columns (eg column subtotals)
     this.sortColumns()
     if (this.spanCols) { this.setColSpans() }
+    this.applyFormatting()
+
     console.log('Table in progress:', this)
     return
-    this.applyFormatting()
 
     if (this.transposeTable) { 
       this.transposeColumns() 
