@@ -75,8 +75,8 @@ const tableModelCoreOptions = {
     display: "select",
     label: "Sort Columns By",
     values: [
-      { 'Pivots': 'getSortByPivots' },
-      { 'Measures': 'getSortByMeasures' }
+      { 'Pivots': 'pivots' },
+      { 'Measures': 'measures' }
     ],
     default: "pivots",
     order: 6,
@@ -174,7 +174,7 @@ class VisPluginTableModel {
     this.addColSubtotals = config.colSubtotals || false
     this.spanRows = false || config.spanRows
     this.spanCols = false || config.spanCols
-    this.sortColsBy = config.sortColumnsBy || 'getSortByPivots' // matches to Column methods: getSortByPivots(), getSortByMeasures)
+    this.sortColsBy = config.sortColumnsBy || 'pivots' // matches to Column methods: pivots(), measures)
     this.fieldLevel = 0 // set in addPivotsAndHeaders()
     this.groupVarianceColumns = config.groupVarianceColumns || false
 
@@ -211,13 +211,13 @@ class VisPluginTableModel {
     if (this.spanCols) { this.setColSpans() }
     this.applyFormatting()
 
+    console.log('Table before transpose:', this)
     if (this.transposeTable) { 
       this.transposeDimensionsIntoHeaders()
       this.transposeRowsIntoColumns() 
       this.transposeColumnsIntoRows()
     }
 
-    console.log('Table in progress:', this)
     return
 
     this.validateConfig()
@@ -396,7 +396,7 @@ class VisPluginTableModel {
     
     measureHeaders.push({ type: 'field', modelField: { label: '(will be replaced by field for column)' } })
 
-    if (this.sortColsBy === 'getSortByPivots') {
+    if (this.sortColsBy === 'pivots') {
       this.headers.push(...measureHeaders)
     } else {
       this.headers.unshift(...measureHeaders)
@@ -434,7 +434,7 @@ class VisPluginTableModel {
           case 'pivot1':
             var pivotField = new ModelPivot({ vis: this, queryResponseField: header.modelField })
             var headerCell = new HeaderCell({ column: column, type: 'pivot', modelField: pivotField })
-            if (this.sortColsBy === 'getSortByMeasures') { headerCell.label = '' }
+            if (this.sortColsBy === 'measures') { headerCell.label = '' }
             column.levels.push(headerCell)
             column.sort.push(0)
             break
@@ -672,7 +672,7 @@ class VisPluginTableModel {
         case 'pivot1':
           var pivotField = new ModelPivot({ vis: this, queryResponseField: header.modelField })
           var headerCell = new HeaderCell({ column: column, type: 'pivot', modelField: pivotField })
-          if (this.sortColsBy === 'getSortByMeasures') { headerCell.label = '' }
+          if (this.sortColsBy === 'measures') { headerCell.label = '' }
           column.levels.push(headerCell)
           column.sort.push(0)
           break
@@ -1187,7 +1187,7 @@ class VisPluginTableModel {
 
           case 'field':
             subtotalColumn.levels.push(new HeaderCell({ column: subtotalColumn, type: 'field', modelField: subtotalColumn.modelField}))
-            if (this.sortColsBy === 'getSortByPivots') {
+            if (this.sortColsBy === 'pivots') {
               subtotalColumn.sort.push(subtotalColumn.subtotal_data.measure_idx)
             } else {
               subtotalColumn.sort.push(10000 + s)
@@ -1563,11 +1563,9 @@ class VisPluginTableModel {
 
   transposeDimensionsIntoHeaders () {
     this.transposed_headers = this.columns
-      .filter(c => c.modelField.type !== 'measure')
+      .filter(c => c.modelField.type === 'dimension')
       .filter(c => !c.hide)
       .map(c => { return { type: 'field', modelField: c.modelField } })
-
-    console.log('transposed_headers', this.transposed_headers)
   }
 
   /**
@@ -1576,13 +1574,6 @@ class VisPluginTableModel {
    * 2. Add a transposed column for every data row
    */
   transposeRowsIntoColumns () {
-    var default_colspan = this.transposed_headers
-      .map(header => {
-        var colspans = {}
-        colspans[header.modelField.name] = 1
-      })
-    console.log('default_colspan', default_colspan)
-
     var index_parent = {
       align: 'left',
       type: 'transposed_table_index',
@@ -1590,18 +1581,27 @@ class VisPluginTableModel {
     }
 
     // One "index column" per header row from original table
-    this.headers.forEach(header => {
-      var column = new Column(header.type, this, index_parent)
+    this.headers.forEach((indexColumn, i) => {
+      var transposedColumn = new Column(indexColumn.type, this, index_parent)
 
-      this.transposed_headers.forEach(header => {
-        var headerCell = new HeaderCell({ column: column, type: header.type, label: header.modelField.label, modelField: header.modelField })
-        column.levels.push(headerCell)
+      this.transposed_headers.forEach((header, h) => {
+        var sourceCell = this.columns[h].levels[i]
+        var headerCell = new HeaderCell({
+          column: transposedColumn,
+          type: sourceCell.type,
+          label: sourceCell.label,
+          align: sourceCell.align,
+          modelField: sourceCell.modelField
+        })
+        headerCell.rowspan = sourceCell.colspan
+        headerCell.colspan = sourceCell.rowspan
+        headerCell.cell_style.push('transposed')
+
+        transposedColumn.levels.push(headerCell)
       })
-      // transposed_column.levels[0] = new HeaderCell({ column: transposed_column, queryResponseField: { name: pivot_field.name, label: pivot_field.label } })
-      this.transposed_columns.push(column)
-    })
 
-    console.log('this.transposed_columns, index cols only so far', this.transposed_columns)
+      this.transposed_columns.push(transposedColumn)
+    })
     
     var measure_parent = {
       align: 'right',
@@ -1610,72 +1610,52 @@ class VisPluginTableModel {
     }
   
     // One column per data row (line items, subtotals, totals)
-    for (var h = 0; h < this.data.length; h++) {
-      var sourceRow = this.data[h]
+    this.data.forEach(sourceRow => {
       var transposedColumn = new Column(sourceRow.id, this, measure_parent)
 
-      if (sourceRow.type === 'line_item') {
-        var colspan_values = {}
-        var levels = []
-        this.transposed_headers.forEach(header => {
-          colspan_values = this.rowspan_values[sourceRow.id]
-          levels.push(sourceRow.data[header.modelField.name].value)
+      this.transposed_headers.forEach(header => {
+        var sourceCell = sourceRow.data[header.modelField.name]
+        var headerCell = new HeaderCell({ 
+          column: transposedColumn, 
+          type: header.type, 
+          label: sourceCell.rendered === '' ? sourceCell.rendered : sourceCell.rendered || sourceCell.value, 
         })
-      } else if (sourceRow.type === 'subtotal') {
-        var colspan_values = default_colspan
-        var levels = newArray(this.transposed_headers.length, new HeaderCell({ column: transposedColumn, type: 'total', modelField: {} }))
-      } else if (sourceRow.type === 'total') {
-        var colspan_values = default_colspan
-        var levels = newArray(this.transposed_headers.length, new HeaderCell({ column: transposedColumn, type: 'total', modelField: {} }))
-      }
+        headerCell.colspan = sourceRow.data[header.modelField.name].rowspan
+        headerCell.rowspan = sourceRow.data[header.modelField.name].colspan
+        headerCell.cell_style.push('transposed')
 
-      transposedColumn.transposed = true
-      transposedColumn.colspan_values = colspan_values
-      transposedColumn.levels = levels
+        transposedColumn.levels.push(headerCell)
+      })
+
       this.transposed_columns.push(transposedColumn)
-    }
+    })
   }
 
   transposeColumnsIntoRows () { 
     this.columns.filter(c => c.modelField.type === 'measure').forEach(column => {
       var transposed_data = {}
 
+      // INDEX FIELDS // every index/dimension column in origianl table must be represented as a data cell in the new transposed rows
+      column.levels.forEach((level, i) => {
+        var cell = new DataCell({
+          value: level.label,
+          rendered: level.label,
+          rowspan: level.colspan,
+          colspan: level.rowspan,
+          cell_style: ['transposed', 'dimension'],
+          align: 'left',
+        })
+
+        transposed_data[level.type] = cell
+      })
+
       // MEASURE FIELDS // every measure column in original table is converted to a data row
       this.data.forEach(row => {
         if (typeof row.data[column.id] !== 'undefined') {
           transposed_data[row.id] = row.data[column.id]
-          transposed_data[row.id]['align'] = column.modelField.align
           transposed_data[row.id]['cell_style'].push('transposed')
         } else {
           console.log('row data does not exist for', column.id)
-        }
-      })
-
-      // INDEX FIELDS // every index/dimension column in origianl table must be represented as a data cell in the new transposed rows
-
-      this.headers.forEach((header, i) => {
-        switch (header.type) {
-          case 'pivot0':
-            var cell = new DataCell({ value: column.levels[i].label, rendered: column.levels[i].label })
-            if (column.subtotal) { cell.cell_style.push('subtotal') }
-            transposed_data['pivot0'] = cell
-            break
-          case 'pivot1':
-            var cell = new DataCell({ value: column.levels[i].label, rendered: column.levels[i].label })
-            if (column.subtotal) { cell.cell_style.push('subtotal') }
-            transposed_data['pivot1'] = cell
-            break
-          case 'heading':
-            var cell = new DataCell({ value: column.levels[i].label, rendered: column.levels[i].label })
-            if (column.subtotal) { cell.cell_style.push('subtotal') }
-            transposed_data['heading'] = cell
-            break
-          case 'field':
-            var cell = new DataCell({ value: column.levels[i].label, rendered: column.levels[i].label })
-            if (column.subtotal) { cell.cell_style.push('subtotal') }
-            if (column.modelField.style.includes('subtotal')) { cell.cell_style.push('subtotal') }
-            transposed_data['field'] = cell
-            break
         }
       })
 
@@ -1782,9 +1762,11 @@ class VisPluginTableModel {
    * Returns an array of 0s, of length to match the required number of header rows
    */
   getHeaderTiers () {    
-    return !this.transposeTable
-      ? this.headers
-      : this.transposed_headers 
+    if (!this.transposeTable) {
+      return this.headers
+    } else {
+      return this.transposed_headers
+    }
   }
 
   /**
@@ -1793,18 +1775,22 @@ class VisPluginTableModel {
    * @param {*} i 
    */
   getTableHeaderCells (i) {
-    return !this.transposeTable
-      ? this.columns
-          .filter(c => !c.hide)
-          .filter(c => this.colspan_values[c.id][this.headers[i].type] > 0)
-      : this.transposed_columns
-          .filter(c => c.levels[i].colspan > 0)
+    if (!this.transposeTable) {
+      return this.columns
+        .filter(c => !c.hide)
+        .filter(c => this.colspan_values[c.id][this.headers[i].type] > 0)
+    } else {
+      return this.transposed_columns
+        .filter(c => c.levels[i].colspan > 0)
+    }
   }
 
   getDataRows () {
-    return !this.transposeTable
-      ? this.data.filter(row => !row.hide)
-      : this.transposed_data.filter(row => !row.hide)
+    if (!this.transposeTable) {
+      return this.data.filter(row => !row.hide)
+    } else {
+      return this.transposed_data.filter(row => !row.hide)
+    }
   }
 
   /**

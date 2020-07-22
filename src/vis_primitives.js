@@ -105,6 +105,7 @@ class HeaderCell {
     this.column = column
     this.type = type
     this.colspan = 1
+    this.rowspan = 1
     this.headerRow = true
     this.cell_style = ['headerCell']
     this.label = label
