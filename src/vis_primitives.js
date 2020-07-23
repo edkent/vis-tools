@@ -211,8 +211,9 @@ class DataCell {
       this.cell_style = cell_style
       this.align = align
 
-      this.rowid = rowid
       this.colid = colid
+      this.rowid = rowid
+      this.id = colid && rowid ? [colid, rowid].join('.') : null
       this.rowspan = rowspan
       this.colspan = colspan
 
