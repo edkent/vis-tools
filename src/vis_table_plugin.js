@@ -39,10 +39,6 @@ const tableModelCoreOptions = {
   headerFontSize: {
     section: 'Theme',
     type: 'number',
-    display: 'range',
-    min: 10,
-    max: 20,
-    step: 1,
     display_size: 'half',
     label: 'Header Size',
     default: 12,
@@ -51,10 +47,6 @@ const tableModelCoreOptions = {
   bodyFontSize: {
     section: 'Theme',
     type: 'number',
-    display: 'range',
-    min: 10,
-    max: 20,
-    step: 1,
     display_size: 'half',
     label: 'Body Size',
     default: 12,
@@ -187,9 +179,6 @@ class VisPluginTableModel {
     this.column_series = []
 
     this.firstVisibleDimension = ''
-
-    this.colspan_values = {}
-    this.rowspan_values = {}
 
     this.useIndexColumn = config.indexColumn || false
     this.useHeadings = config.useHeadings || false
@@ -764,12 +753,12 @@ class VisPluginTableModel {
         var cellValue = (column.pivoted || column.isRowTotal)? lookerRow[column.modelField.name][column.pivot_key] : lookerRow[column.id]
         var cell = new DataCell({ ...cellValue, ...{ colid: column.id, rowid: row.id } })
 
-        if (column.modelField.type === 'dimension') {
+        if (column.modelField.is_numeric) {
+          cell.cell_style.push('numeric')
+          cell.align = 'right'
+        } else {
+          cell.cell_style.push('nonNumeric')
           cell.align = 'left'
-        }
-
-        if (column.modelField.type === 'measure') {
-          cell.cell_style.push('measure')
         }
 
         if (typeof column.modelField.style !== 'undefined') {
@@ -799,15 +788,14 @@ class VisPluginTableModel {
 
       if (this.useIndexColumn) {
         var last_dim = this.dimensions[this.dimensions.length - 1].name
-        sourceCell = row.data[last_dim]
+        var sourceCell = row.data[last_dim]
 
         row.data['$$$_index_$$$'] = new DataCell({
           value: sourceCell.value,
           rendered: sourceCell.rendered,
           html: sourceCell.html,
-          cell_style: ['indent'],
-          align: 'left',
-          rowspan: 1,
+          cell_style: ['singleIndex'],
+          align: this.dimensions[this.dimensions.length - 1].is_numeric ? 'right' : 'left',
           colid: '$$$_index_$$$',
           rowid: sourceCell.rowid
         })
@@ -865,10 +853,11 @@ class VisPluginTableModel {
         }
         totalsRow.data[column.id] = new DataCell({ 
           value: '', 
-          cell_style: ['total'], 
+          cell_style: ['total'],
           rowspan: rowspan, 
           colspan: colspan,
           colid: column.id,
+          align: column.modelField.is_numeric ? 'right' : 'left',
           rowid: 'Total' 
         })
       } else {
@@ -878,21 +867,23 @@ class VisPluginTableModel {
       
       
       if (column.modelField.type === 'measure') {
+        var cell_style = column.modelField.is_numeric ? ['total', 'numeric'] : ['total', 'nonNumeric']
         var cellValue = (column.pivoted || column.isRowTotal) ? totals_[column.modelField.name][column.pivot_key] : totals_[column.id]
         cellValue = new DataCell({ 
           ...cellValue, 
           ...{ 
+            cell_style: cell_style,
             rowspan: rowspan, 
             colspan: colspan, 
             colid: column.id, 
+            align: column.modelField.is_numeric ? 'right' : 'left',
             rowid: 'Total'} 
         })
 
-        if (typeof cellValue.rendered === 'undefined' && typeof cellValue.html !== 'undefined' ){ // totals data may include html but not rendered value
+        if (typeof cellValue.rendered === 'undefined' && typeof cellValue.html !== 'undefined' ) { // totals data may include html but not rendered value
           cellValue.rendered = this.getRenderedFromHtml(cellValue)
         }
         
-        cellValue.cell_style = ['total']
         totalsRow.data[column.id] = cellValue
         if (typeof totalsRow.data[column.id].links !== 'undefined') {
           totalsRow.data[column.id].links.forEach(link => {
@@ -923,7 +914,7 @@ class VisPluginTableModel {
       othersRow.id = 'Others'
       this.columns.forEach(column => {
         var othersValue = null
-        var othersStyle = []
+        var othersStyle = column.modelField.is_numeric ? 'numeric' : 'nonNumeric'
         var totalValue = (column.pivoted || column.isRowTotal) ? totals_[column.modelField.name][column.pivot_key] : totals_[column.id]
         
         if (column.modelField.type === 'measure') {
@@ -946,18 +937,19 @@ class VisPluginTableModel {
             value: othersValue, 
             rendered: formatted_value, 
             cell_style: othersStyle,
+            align: column.modelField.is_numeric ? 'right' : 'left',
             colid: column.id,
             rowid: 'Others'
           })
         } else {
-          othersRow.data[column.id] = new DataCell({ colid: column.id, rowid: 'Others' })
+          othersRow.data[column.id] = new DataCell({ cell_style: cell_style, colid: column.id, rowid: 'Others' })
         }
       })
 
       if (this.useIndexColumn) {
         othersRow.data['$$$_index_$$$'].value = 'Others'
         othersRow.data['$$$_index_$$$'].align = 'left'
-        othersRow.data['$$$_index_$$$'].cell_style.push('indent')
+        othersRow.data['$$$_index_$$$'].cell_style.push('singleIndex')
       } else {
         if (this.firstVisibleDimension) {
           othersRow.data[this.firstVisibleDimension].value = 'Others'
@@ -983,7 +975,6 @@ class VisPluginTableModel {
   setRowSpans () {
     var leaves = []
     var tiers = []
-    var span_values = this.rowspan_values
     var span_tracker = {}
 
     // 1)
@@ -992,7 +983,7 @@ class VisPluginTableModel {
     // 2)
     tiers = this.dimensions.filter(d => !d.hide)
     tiers.forEach(tier => {
-      span_tracker[tier.id] = 1
+      span_tracker[tier.name] = 1
     })
 
     // Loop backwards through leaves
@@ -1008,7 +999,6 @@ class VisPluginTableModel {
       }
 
       // Loop fowards through the tiers
-      span_values[leaf.id] = {}
       for (var t = 0; t < tiers.length; t++) {
         var tier = tiers[t]
         var this_tier_value = leaf.data[tier.name].value
@@ -1016,7 +1006,6 @@ class VisPluginTableModel {
 
         // Match: mark invisible (span_value = -1). Increment the span_tracker.
         if (l > 0 && this_tier_value === neighbour_value) {
-          span_values[leaf.id][tier.name] = -1
           leaf.data[tier.name].rowspan = -1
           leaf.data[tier.name].colspan = -1
           span_tracker[tier.name] += 1
@@ -1024,7 +1013,6 @@ class VisPluginTableModel {
         // Different: set span_value from span_tracker. Partial reset and continue
           for (var t_ = t; t_ < tiers.length; t_++) {
             var tier_ = tiers[t_]
-            span_values[leaf.id][tier_.name] = span_tracker[tier_.name]
             leaf.data[tier_.name].rowspan = span_tracker[tier_.name]
             span_tracker[tier_.name] = 1
           }
@@ -1092,9 +1080,10 @@ class VisPluginTableModel {
             var rowspan = -1
             var colspan = -1
           }
+          var cell_style = column.modelField.is_numeric ? ['total', 'subtotal', 'numeric'] : ['total', 'subtotal', 'nonNumeric']
           var cell = new DataCell({ 
-            'cell_style': ['total', 'subtotal'], 
-            align: 'left', 
+            'cell_style': cell_style, 
+            align: column.modelField.is_numeric ? 'right' : 'left', 
             rowspan: rowspan, 
             colspan: colspan,
             colid: column.id,
@@ -1108,13 +1097,13 @@ class VisPluginTableModel {
         }
 
         if (column.modelField.type == 'measure') {
-          if (Object.entries(this.subtotals_data).length > 0 && subtotalRow.id !== 'Subtotal|Others') { // if subtotals already provided in Looker's queryResponse
+          var cell_style = column.modelField.is_numeric ? ['total', 'subtotal', 'numeric'] : ['total', 'subtotal', 'nonNumeric']
+          if (Object.entries(this.subtotals_data).length > 0 && !subtotalRow.id.startsWith('Subtotal|Others')) { // if subtotals already provided in Looker's queryResponse
             var cell = new DataCell({ 
               ...subtotalRow.data[column.id], 
               ...this.subtotals_data[subtotalRow.id].data[column.id],
-              ...{ colid: column.id, rowid: subtotalRow.id }
+              ...{ cell_style: cell_style, colid: column.id, rowid: subtotalRow.id }
             })
-            cell.cell_style = ['subtotal', 'total']
             subtotalRow.data[column.id] = cell
           } else {
             // var cellKey = column.pivoted ? [column.pivot_key, column.modelField.name].join('.') : column.id
@@ -1145,7 +1134,7 @@ class VisPluginTableModel {
             var cell = new DataCell({
               value: subtotal_value,
               rendered: rendered,
-              cell_style: ['subtotal', 'total'],
+              cell_style: cell_style,
               colid: column.id,
               rowid: subtotalRow.id
             })
@@ -1198,7 +1187,6 @@ class VisPluginTableModel {
           this.columns.forEach((column, i) => {  
             var columnPivotValue = null
             for (var i = 0; i < column.levels.length; i++) {
-              // if (column.levels[i].type === 'pivot') {
               if (column.levels[i].type.startsWith('pivot')) {
                 columnPivotValue = column.levels[i].modelField.label
                 break
@@ -1224,10 +1212,14 @@ class VisPluginTableModel {
         switch (header.type) {
           case 'pivot0':
             var sort_value_from_column = subtotalColumn.subtotal_data.columns[0].levels[i].pivotData.sort_values[header.modelField.name]
-            subtotalColumn.levels.push(new HeaderCell({ column: subtotalColumn, type: header.type, modelField: {
-              name: this.pivot_fields[0].name,
-              label: subtotalColumn.subtotal_data.pivot,
-            }}))
+            subtotalColumn.levels.push(new HeaderCell({ 
+              column: subtotalColumn, 
+              type: header.type, 
+              modelField: {
+                name: this.pivot_fields[0].name,
+                label: subtotalColumn.subtotal_data.pivot,
+              }
+            }))
             subtotalColumn.sort.push(sort_value_from_column)
             break
 
@@ -1236,7 +1228,8 @@ class VisPluginTableModel {
               name: 'subtotal',
               label: 'Subtotal',
             }}))
-            subtotalColumn.sort.push(9999)
+            var subtotalSortValue = typeof this.pivot_values[0].sort_values[header.modelField.name] === 'string' ? 'ZZZZ' : 99999999
+            subtotalColumn.sort.push(subtotalSortValue)
             break
 
           case 'heading':
@@ -1245,11 +1238,7 @@ class VisPluginTableModel {
 
           case 'field':
             subtotalColumn.levels.push(new HeaderCell({ column: subtotalColumn, type: 'field', modelField: subtotalColumn.modelField}))
-            if (this.sortColsBy === 'pivots') {
-              subtotalColumn.sort.push(subtotalColumn.subtotal_data.measure_idx)
-            } else {
-              subtotalColumn.sort.push(10000 + s)
-            }
+            subtotalColumn.sort.push(subtotalColumn.subtotal_data.measure_idx)
             break
         }
       })
@@ -1259,6 +1248,7 @@ class VisPluginTableModel {
     // CALCULATE COLUMN SUB TOTAL VALUES
     this.data.forEach(row => {
       subtotalColumns.forEach(subtotalColumn => {
+        var cell_style = subtotalColumn.modelField.is_numeric ? ['subtotal', 'numeric'] : ['subtotal', 'nonNumeric']
         var subtotal_value = 0
         subtotalColumn.subtotal_data.columns.forEach(column => { // subtotalColumn.columns i.e. the individual columns that are aggregated into a single subtotal columns
           subtotal_value += row.data[column.id].value
@@ -1266,7 +1256,7 @@ class VisPluginTableModel {
         row.data[subtotalColumn.id] = new DataCell({
           value: subtotal_value,
           rendered: subtotalColumn.modelField.value_format === '' ? subtotal_value.toString() : SSF.format(subtotalColumn.modelField.value_format, subtotal_value),
-          cell_style: ['subtotal'],
+          cell_style: cell_style,
           colid: subtotalColumn.id,
           rowid: row.id
         })
@@ -1295,7 +1285,7 @@ class VisPluginTableModel {
         var cell = new DataCell({
           value: baseline_value - comparison_value,
           rendered: value_format === '' ? (baseline_value - comparison_value).toString() : SSF.format(value_format, (baseline_value - comparison_value)),
-          cell_style: [],
+          cell_style: ['numeric'],
           colid: id,
           rowid: row.id
         })
@@ -1305,7 +1295,7 @@ class VisPluginTableModel {
           var cell = new DataCell({
             value: null,
             rendered: '∞',
-            cell_style: [],
+            cell_style: ['numeric'],
             colid: id,
             rowid: row.id
           })
@@ -1313,7 +1303,7 @@ class VisPluginTableModel {
           var cell = new DataCell({
             value: value,
             rendered: SSF.format('#0.00%', value),
-            cell_style: [],
+            cell_style: ['numeric'],
             colid: id,
             rowid: row.id
           })
@@ -1326,7 +1316,7 @@ class VisPluginTableModel {
         cell.cell_style.push('subtotal')
       }
       if (cell.value < 0) {
-        cell.cell_style.push('red')
+        cell.cell_style.push('negative')
       }
       row.data[id] = cell
     })
@@ -1375,6 +1365,9 @@ class VisPluginTableModel {
         case 'pivot0':
         case 'pivot1':
           var label = baseline.getHeaderCellLabelByType(header.type)
+          if (this.groupVarianceColumns && header.type === 'pivot0') {
+            var label = this.pivot_values.length === 2 ? 'Variance' : 'Variance: ' + label
+          }
           var headerCell = new HeaderCell({ column: column, type: header.type, modelField: { label: label } })
           column.levels[i] = headerCell
           break
@@ -1544,7 +1537,6 @@ class VisPluginTableModel {
   setColSpans () {
     var leaves = []
     var tiers = []
-    var span_values = this.colspan_values
     var span_tracker = {}
     
     // 1)
@@ -1557,10 +1549,6 @@ class VisPluginTableModel {
       }
       leaves.push(leaf)
     })
-    // console.log('setColSpans() leaves', leaves)
-    // console.log('Can these leaves be replaced by / are they already just references to the column headers / levels themselves?')
-    // console.log('That would be closed to the setRowSpans function, enabling colspan to be stored within the cell')
-    // console.log('That would be useful to a) use same pattern for transposing rows & cells, b) enabling a rowspan function on the totals column header, c) reducing the link between report_table.js and vis_tabl_plugin.js')
 
     // 2)
     tiers = this.headers
@@ -1571,7 +1559,6 @@ class VisPluginTableModel {
     // 3)
     for (var l = leaves.length - 1; l >= 0; l--) {
       var leaf = leaves[l]
-      span_values[leaf.id] = {}
 
       // 5)
       for (var t = 0; t < tiers.length; t++) {
@@ -1581,7 +1568,6 @@ class VisPluginTableModel {
 
         // 6) 
         if (l > 0 && this_tier_value === neighbour_value) {
-          span_values[leaf.id][tier.type] = -1;
           leaf.data[tier.type].colspan = -1
           leaf.data[tier.type].rowspan = -1
           span_tracker[tier.type] += 1;
@@ -1589,22 +1575,16 @@ class VisPluginTableModel {
         // 7) 
           for (var t_ = t; t_ < tiers.length; t_++) {
             var tier_ = tiers[t_]
-            span_values[leaf.id][tier_.type] = span_tracker[tier_.type];
             leaf.data[tier_.type].colspan = span_tracker[tier_.type]
+            if (leaf.data[tier_.type].colspan > 1) {
+              leaf.data[tier_.type].align = 'center'
+            }
             span_tracker[tier_.type] = 1
           }
           break;
         }
       }
     }
-
-    // row spans are set against the cell values (can be many individual cells)
-    // col spans are set against the Column object (can only be a few headers)
-    // this.columns.forEach(column => {
-    //   if (typeof span_values[column.id] !== 'undefined') {
-    //     column.colspans = span_values[column.id]
-    //   }
-    // })
   }
 
   /**
@@ -1618,7 +1598,7 @@ class VisPluginTableModel {
           case 'black_red':
             this.data.forEach(row => {
               if (row.data[column.id].value < 0) {
-                row.data[column.id].cell_style.push('red')
+                row.data[column.id].cell_style.push('negative')
               }
             })
             break
@@ -1640,6 +1620,7 @@ class VisPluginTableModel {
    * 2. Add a transposed column for every data row
    */
   transposeRowsIntoColumns () {
+    // TODO: review logic for cell.align
     var index_parent = {
       align: 'left',
       type: 'transposed_table_index',
@@ -1712,7 +1693,7 @@ class VisPluginTableModel {
           rowspan: level.colspan,
           colspan: level.rowspan,
           cell_style: ['transposed', 'dimension'],
-          align: 'left',
+          align: column.modelField.is_numeric ? 'right' : 'left',
           colid: column.id,
           rowid: this.headers[i].type
         })
@@ -1849,7 +1830,7 @@ class VisPluginTableModel {
     if (!this.transposeTable) {
       return this.columns
         .filter(c => !c.hide)
-        .filter(c => this.colspan_values[c.id][this.headers[i].type] > 0)
+        .filter(c => c.levels[i].colspan > 0)
     } else {
       return this.transposed_columns
         .filter(c => c.levels[i].colspan > 0)

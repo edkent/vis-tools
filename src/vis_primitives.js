@@ -110,23 +110,33 @@ class HeaderCell {
     this.cell_style = ['headerCell']
     this.label = label
 
-    if (this.column.modelField.type === 'dimension') {
-      if (type === 'pivot') {
-        this.align = 'right'
-      } else if (type === 'heading') {
-        this.align = 'center'
-      } else {
-        this.align = modelField.align || 'left'
-      }
-    } else if (this.column.modelField.type === 'measure') {
-      if (type === 'field' && (column.vis.pivot_fields.length === 0 || column.vis.sortColsBy === 'getSortByPivots' )) {
-        this.align = modelField.align || 'right'
-      } else {
-        this.align = 'center'
-      }
-    } else {
-      this.align = align
-    }
+    this.align = this.column.modelField.is_numeric ? 'right' : 'left'
+
+    // if (column.vis.sortColsBy === 'pivots') {
+    //   if (type.startsWith 'pivot') {
+    //     this.align = 'center'
+    //   }
+    // } else {
+
+    // }
+
+    // if (this.column.modelField.type === 'dimension') {
+    //   if (type === 'pivot') {
+    //     this.align = 'right'
+    //   } else if (type === 'heading') {
+    //     this.align = 'center'
+    //   } else {
+    //     this.align = modelField.align || 'left'
+    //   }
+    // } else if (this.column.modelField.type === 'measure') {
+    //   if (type === 'field' && (column.vis.pivot_fields.length === 0 || column.vis.sortColsBy === 'getSortByPivots' )) {
+    //     this.align = modelField.align || 'right'
+    //   } else {
+    //     this.align = 'center'
+    //   }
+    // } else {
+    //   this.align = align
+    // }
 
     this.modelField = modelField
     this.pivotData = pivotData
@@ -202,22 +212,20 @@ class ColumnSeries {
 }
 
 class DataCell {
-  constructor({ value, rendered = null, html = null, links = [], cell_style = [], align = 'right', rowid = '', colid = '', rowspan = 1, colspan = 1} = {})
+  constructor({ value, rendered = null, html = null, links = [], cell_style = [], align = 'right', rowspan = 1, colspan = 1, rowid = '', colid = '' } = {})
     {
       this.value = value
       this.rendered = rendered
       this.html = html
       this.links = links
-      this.cell_style = cell_style
+      this.cell_style = ['rowCell'].concat(cell_style)
       this.align = align
+      this.rowspan = rowspan
+      this.colspan = colspan
 
       this.colid = colid
       this.rowid = rowid
       this.id = colid && rowid ? [colid, rowid].join('.') : null
-      this.rowspan = rowspan
-      this.colspan = colspan
-
-      this.cell_style.push('rowCell')
     }
 }
 
@@ -272,12 +280,6 @@ class Column {
 
     this.sort = []
     this.colspans = []
-
-    var colspan_values = {}
-    this.vis.headers.forEach(header => {
-      colspan_values[header.type] = 1
-    })
-    this.vis.colspan_values[this.id] = colspan_values
   }
 
   /**
