@@ -36,6 +36,13 @@ const tableModelCoreOptions = {
     default: "fixed",
     order: 3,
   },
+  minWidthForIndexColumns: {
+    section: 'Theme',
+    type: 'boolean',
+    label: "Set minimum width for index columns",
+    default: true,
+    order: 3.5
+  },
   headerFontSize: {
     section: 'Theme',
     type: 'number',
@@ -87,6 +94,13 @@ const tableModelCoreOptions = {
     default: true,
     order: 4,
   },
+  calculateOthers: {
+    section: "Table",
+    type: "boolean",
+    label: "Calculate Others Row",
+    default: true,
+    order: 4.5
+  },
   sortColumnsBy: {
     section: "Table",
     type: "string",
@@ -120,6 +134,13 @@ const tableModelCoreOptions = {
     default: false,
     order: 9,
   },
+  useUnit: {
+    section: "Table",
+    type: "boolean",
+    label: "Use Unit (when reporting in 000s)",
+    default: false,
+    order: 9.5,
+  },
   groupVarianceColumns: {
     section: "Table",
     type: "boolean",
@@ -137,7 +158,7 @@ const tableModelCoreOptions = {
   transposeTable: {
     section: "Table",
     type: "boolean",
-    label: "Transpose",
+    label: "Transpose Table",
     default: false,
     order: 100,
   },
@@ -192,9 +213,10 @@ class VisPluginTableModel {
     this.sortColsBy = config.sortColumnsBy || 'pivots' // matches to Column methods: pivots(), measures)
     this.fieldLevel = 0 // set in addPivotsAndHeaders()
     this.groupVarianceColumns = config.groupVarianceColumns || false
+    this.minWidthForIndexColumns = config.minWidthForIndexColumns || false
 
     this.hasTotals = typeof queryResponse.totals_data !== 'undefined' ? true : false
-    this.calculateOthers = typeof queryResponse.truncated !== 'undefined' ? queryResponse.truncated : false 
+    this.calculateOthers = typeof queryResponse.truncated !== 'undefined' ? queryResponse.truncated && config.calculateOthers : false 
     this.hasSubtotals = typeof queryResponse.subtotals_data !== 'undefined' ? true : false
     this.hasRowTotals = queryResponse.has_row_totals || false
     this.hasPivots = typeof queryResponse.pivots !== 'undefined' ? true : false
@@ -233,7 +255,7 @@ class VisPluginTableModel {
     }
 
     this.validateConfig()
-    // this.getTableColumnGroups() 
+    this.getTableColumnGroups() 
   }
 
   static getCoreConfigOptions() {
@@ -315,13 +337,41 @@ class VisPluginTableModel {
         type: 'string',
         label: 'Style',
         display: 'select',
+        display_size: 'third',
         values: [
           {'Normal': 'normal'},
           {'Black/Red': 'black_red'},
           {'Subtotal': 'subtotal'},
           {'Hidden': 'hide'}
         ],
+        default: 'normal',
         order: 100 + i * 10 + 3
+      }
+
+      newOptions['reportIn|' + measure.name] = {
+        section: 'Measures',
+        type: 'string',
+        label: 'Report In',
+        display: 'select',
+        display_size: 'third',
+        values: [
+          {'Absolute Figures': '1'},
+          {'Thousands': '1000'},
+          {'Millions': '1000000'},
+          {'Billions': '1000000000'}
+        ],
+        default: '1',
+        order: 100 + i * 10 + 3.5
+      }
+
+      newOptions['unit|' + measure.name] = {
+        section: 'Measures',
+        type: 'string',
+        label: 'Unit',
+        // display: 'select',
+        display_size: 'third',
+        default: '',
+        order: 100 + i * 10 + 3.7
       }
 
       var comparisonOptions = []
@@ -357,6 +407,7 @@ class VisPluginTableModel {
         label: 'Comparison',
         display: 'select',
         values: comparisonOptions,
+        default: 'no_variance',
         order: 100 + i * 10 + 5
       }
 
@@ -446,7 +497,8 @@ class VisPluginTableModel {
           case 'pivot1':
             var pivotField = new ModelPivot({ vis: this, queryResponseField: header.modelField })
             var headerCell = new HeaderCell({ column: column, type: header.type, modelField: pivotField })
-            if (this.sortColsBy === 'measures') { headerCell.label = '' }
+            // if (this.sortColsBy === 'measures') { headerCell.label = '' }
+            headerCell.label = '' // TODO: Decide how (if) it makes sense to add pivot labels at top of dimension columns
             column.levels.push(headerCell)
             column.sort.push(0)
             break
@@ -491,6 +543,15 @@ class VisPluginTableModel {
         queryResponseField: measure,
         can_pivot: true
       })
+
+      var reportInSetting = this.config['reportIn|' + measure.name]
+      var unitSetting = this.config['unit|' + measure.name]
+      if (typeof reportInSetting !== 'undefined'  && reportInSetting !== '1') {
+        newMeasure.value_format = '#,##0'
+        if (typeof unitSetting !== 'undefined' && unitSetting !== '') {
+           newMeasure.unit = unitSetting
+        }
+      }
       this.measures.push(newMeasure) 
     })
     
@@ -720,18 +781,27 @@ class VisPluginTableModel {
 
         this.columns.forEach(column => {
           visSubtotal.data[column.id] = (column.pivoted || column.isRowTotal) ? lookerSubtotal[column.modelField.name][column.pivot_key] : lookerSubtotal[column.id]
+          var cell = visSubtotal.data[column.id]
 
-          if (typeof visSubtotal.data[column.id] !== 'undefined') {
-            if (typeof visSubtotal.data[column.id].cell_style === 'undefined') {
-              visSubtotal.data[column.id].cell_style = ['total', 'subtotal']
+          if (typeof cell !== 'undefined') {
+            if (typeof cell.cell_style === 'undefined') {
+              cell.cell_style = ['total', 'subtotal']
             } else {
-              visSubtotal.data[column.id].cell_style.concat(['total', 'subtotal'])
+              cell.cell_style.concat(['total', 'subtotal'])
             }
             if (typeof column.modelField.style !== 'undefined') {
-              visSubtotal.data[column.id].cell_style = visSubtotal.data[column.id].cell_style.concat(column.modelField.style)
+              cell.cell_style = cell.cell_style.concat(column.modelField.style)
             }
-            if (visSubtotal.data[column.id].value === null) {
-              visSubtotal.data[column.id].rendered = ''
+            if (cell.value === null) {
+              cell.rendered = ''
+            }
+
+            var reportInSetting = this.config['reportIn|' + column.modelField.name]
+            if (typeof reportInSetting !== 'undefined' && reportInSetting !== '1') {
+              var unit = this.config.useUnit ? column.modelField.unit : ''
+              cell.html = null
+              cell.value = Math.round(cell.value / parseInt(reportInSetting))
+              cell.rendered = column.modelField.value_format === '' ? cell.value.toString() : unit + SSF.format(column.modelField.value_format, cell.value)
             }
           }            
         })
@@ -767,6 +837,14 @@ class VisPluginTableModel {
 
         if (cell.value === null) {
           cell.rendered = ''
+        }
+
+        var reportInSetting = this.config['reportIn|' + column.modelField.name]
+        if (typeof reportInSetting !== 'undefined'  && reportInSetting !== '1') {
+          var unit = this.config.useUnit ? column.modelField.unit : ''
+          cell.html = null
+          cell.value = Math.round(cell.value / parseInt(reportInSetting))
+          cell.rendered = column.modelField.value_format === '' ? cell.value.toString() : unit + SSF.format(column.modelField.value_format, cell.value)
         }
 
         if (column.modelField.is_turtle) {
@@ -869,6 +947,7 @@ class VisPluginTableModel {
       if (column.modelField.type === 'measure') {
         var cell_style = column.modelField.is_numeric ? ['total', 'numeric'] : ['total', 'nonNumeric']
         var cellValue = (column.pivoted || column.isRowTotal) ? totals_[column.modelField.name][column.pivot_key] : totals_[column.id]
+
         cellValue = new DataCell({ 
           ...cellValue, 
           ...{ 
@@ -882,6 +961,14 @@ class VisPluginTableModel {
 
         if (typeof cellValue.rendered === 'undefined' && typeof cellValue.html !== 'undefined' ) { // totals data may include html but not rendered value
           cellValue.rendered = this.getRenderedFromHtml(cellValue)
+        }
+
+        var reportInSetting = this.config['reportIn|' + column.modelField.name]
+        if (typeof reportInSetting !== 'undefined'  && reportInSetting !== '1') {
+          var unit = this.config.useUnit ? column.modelField.unit : ''
+          cellValue.html = undefined
+          cellValue.value = Math.round(cellValue.value / parseInt(reportInSetting))
+          cellValue.rendered = column.modelField.value_format === '' ? cellValue.value.toString() : unit + SSF.format(column.modelField.value_format, cellValue.value)
         }
         
         totalsRow.data[column.id] = cellValue
@@ -914,8 +1001,8 @@ class VisPluginTableModel {
       othersRow.id = 'Others'
       this.columns.forEach(column => {
         var othersValue = null
-        var othersStyle = column.modelField.is_numeric ? 'numeric' : 'nonNumeric'
-        var totalValue = (column.pivoted || column.isRowTotal) ? totals_[column.modelField.name][column.pivot_key] : totals_[column.id]
+        var othersStyle = column.modelField.is_numeric ? ['numeric'] : ['nonNumeric']
+        var totalValue = totalsRow.data[column.id]
         
         if (column.modelField.type === 'measure') {
           if (othersValue = ['sum', 'count'].includes(column.modelField.calculation_type)) {
@@ -942,17 +1029,24 @@ class VisPluginTableModel {
             rowid: 'Others'
           })
         } else {
-          othersRow.data[column.id] = new DataCell({ cell_style: cell_style, colid: column.id, rowid: 'Others' })
+          othersRow.data[column.id] = new DataCell({ 
+            rendered: '',
+            cell_style: othersStyle, 
+            colid: column.id, 
+            rowid: 'Others'
+          })
         }
       })
 
       if (this.useIndexColumn) {
         othersRow.data['$$$_index_$$$'].value = 'Others'
+        othersRow.data['$$$_index_$$$'].rendered = 'Others'
         othersRow.data['$$$_index_$$$'].align = 'left'
         othersRow.data['$$$_index_$$$'].cell_style.push('singleIndex')
       } else {
         if (this.firstVisibleDimension) {
           othersRow.data[this.firstVisibleDimension].value = 'Others'
+          othersRow.data[this.firstVisibleDimension].rendered = 'Others'
           othersRow.data[this.firstVisibleDimension].align = 'left'
         }
       }
@@ -1098,11 +1192,12 @@ class VisPluginTableModel {
 
         if (column.modelField.type == 'measure') {
           var cell_style = column.modelField.is_numeric ? ['total', 'subtotal', 'numeric'] : ['total', 'subtotal', 'nonNumeric']
+          var align = column.modelField.is_numeric ? 'right' : 'left'
           if (Object.entries(this.subtotals_data).length > 0 && !subtotalRow.id.startsWith('Subtotal|Others')) { // if subtotals already provided in Looker's queryResponse
             var cell = new DataCell({ 
               ...subtotalRow.data[column.id], 
               ...this.subtotals_data[subtotalRow.id].data[column.id],
-              ...{ cell_style: cell_style, colid: column.id, rowid: subtotalRow.id }
+              ...{ cell_style: cell_style, align: align, colid: column.id, rowid: subtotalRow.id }
             })
             subtotalRow.data[column.id] = cell
           } else {
@@ -1124,7 +1219,8 @@ class VisPluginTableModel {
               subtotal_value = subtotal_value / subtotal_items
             }
             if (subtotal_value) {
-              rendered = column.modelField.value_format === '' ? subtotal_value.toString() : SSF.format(column.modelField.value_format, subtotal_value)
+              var unit = this.config.useUnit ? column.modelField.unit : ''
+              rendered = column.modelField.value_format === '' ? subtotal_value.toString() : unit + SSF.format(column.modelField.value_format, subtotal_value)
             }
             if (column.modelField.calculation_type === 'string') {
               subtotal_value = ''
@@ -1135,6 +1231,7 @@ class VisPluginTableModel {
               value: subtotal_value,
               rendered: rendered,
               cell_style: cell_style,
+              align: align,
               colid: column.id,
               rowid: subtotalRow.id
             })
@@ -1930,33 +2027,44 @@ class VisPluginTableModel {
    * - totals (totals)
    */
   getTableColumnGroups () {
-    var index_columns = []
-    var measure_columns = []
-    var total_columns = []
+    var indexColumns = []
+    var measureColumns = []
+    var totalColumns = []
 
     if (!this.transposeTable) {
       this.columns.forEach(column => {
-        if (column.modelField.type === 'dimension' && !this.useIndexColumn && column.id !== '$$$_index_$$$' && !column.hide) {
-          index_columns.push({ id: column.id })
-        } else if (column.modelField.type === 'dimension' && this.useIndexColumn && column.id === '$$$_index_$$$') {
-          index_columns.push({ id: column.id })
-        } else if (column.modelField.type === 'measure' && !column.super && !column.hide) {
-          measure_columns.push({ id: column.id })
-        } else if (column.modelField.type === 'measure' && column.super && !column.hide) {
-          total_columns.push({ id: column.id })
+        if (column.modelField.type === 'dimension' && !column.hide) {
+          indexColumns.push({ id: column.id, type: 'index' })
+        } else if (column.modelField.type === 'measure' && !column.isRowTotal && !column.super && !column.hide) {
+          measureColumns.push({ id: column.id, type: 'dataCell' })
+        } else if (column.modelField.type === 'measure' && (column.isRowTotal || column.super) && !column.hide) {
+          totalColumns.push({ id: column.id, type: 'dataCell' })
         }
       })
     } else {
       this.transposed_columns.forEach(column => {
         if (column.modelField.type === 'transposed_table_index') {
-          index_columns.push({ id: column.id})
+          indexColumns.push({ id: column.id, type: 'index' })
         } else if (column.modelField.type === 'transposed_table_measure' && column.id !== 'Total') {
-          measure_columns.push({ id: column.id })
+          measureColumns.push({ id: column.id, type: 'dataCell' })
         } else if (column.modelField.type === 'transposed_table_measure' && column.id === 'Total') {
-          total_columns.push({ id: column.id })
+          totalColumns.push({ id: column.id, type: 'dataCell' })
         }
       })
     }
+
+    var columnGroups = []
+    if (indexColumns.length > 0) {
+      columnGroups.push(indexColumns)
+    }
+    if (measureColumns.length > 0) {
+      columnGroups.push(measureColumns)
+    }
+    if (totalColumns.length > 0) {
+      columnGroups.push(totalColumns)
+    }
+
+    return columnGroups
   }
 }
 
