@@ -39,7 +39,7 @@ const tableModelCoreOptions = {
   minWidthForIndexColumns: {
     section: 'Theme',
     type: 'boolean',
-    label: "Set minimum width for index columns",
+    label: "Automatc column width on index",
     default: true,
     order: 3.5
   },
@@ -497,7 +497,6 @@ class VisPluginTableModel {
           case 'pivot1':
             var pivotField = new ModelPivot({ vis: this, queryResponseField: header.modelField })
             var headerCell = new HeaderCell({ column: column, type: header.type, modelField: pivotField })
-            // if (this.sortColsBy === 'measures') { headerCell.label = '' }
             headerCell.label = '' // TODO: Decide how (if) it makes sense to add pivot labels at top of dimension columns
             column.levels.push(headerCell)
             column.sort.push(0)
@@ -578,8 +577,7 @@ class VisPluginTableModel {
                 case 'pivot0':
                 case 'pivot1':
                   var label = isRowTotal ? '' : pivot_value.data[header.modelField.name]
-                  // if (isRowTotal && header.type === 'pivot' + (this.pivot_fields.length - 1)) {
-                  if (isRowTotal && header.type.startsWith('pivot') + (this.pivot_fields.length - 1)) {
+                  if (isRowTotal && header.type.startsWith('pivot') && header.type === 'pivot' + (this.pivot_fields.length - 1)) {
                     label = 'Row Total'
                   }
                   column.levels.push(new HeaderCell({ 
@@ -656,6 +654,14 @@ class VisPluginTableModel {
           queryResponseField: supermeasure,
           can_pivot: false,
         })
+        var reportInSetting = this.config['reportIn|' + supermeasure.name]
+        var unitSetting = this.config['unit|' + supermeasure.name]
+        if (typeof reportInSetting !== 'undefined'  && reportInSetting !== '1') {
+          meas.value_format = '#,##0'
+          if (typeof unitSetting !== 'undefined' && unitSetting !== '') {
+            meas.unit = unitSetting
+          }
+        }
         this.measures.push(meas) 
 
         var column = new Column(meas.name, this, meas)
@@ -692,9 +698,11 @@ class VisPluginTableModel {
    *  option is either 'no_variance' or a measure.name
    */
   checkVarianceCalculations() {
+    console.log('config', this.config)
     Object.keys(this.config).forEach(option => {
       if (option.startsWith('comparison')) {
         var baseline = option.split('|')[1]
+        var comparison = this.config[option]
 
         var baseline_in_measures = false
         this.measures.forEach(measure => {
@@ -703,7 +711,16 @@ class VisPluginTableModel {
           }
         })
 
-        if (baseline_in_measures) {
+        var comparison_available = false
+
+        var comparison_options = [...this.measures.map(measure => measure.name), ...this.pivot_fields.map(pivot_field => pivot_field.name)]
+        comparison_options.forEach(comparitor => {
+          if (comparison === comparitor) {
+            comparison_available = true
+          }
+        })
+
+        if (baseline_in_measures && comparison_available) {
           if (this.pivot_fields.map(pivot_field => pivot_field.name).includes(this.config[option])) {
             var type = 'by_pivot'
           } else {
@@ -724,6 +741,10 @@ class VisPluginTableModel {
             type: type,
             reverse: reverse
           })
+        } else if (baseline_in_measures) {
+          this.config[option] = 'no_variance'
+        } else {
+          delete this.config[option]
         }
       }
     })
@@ -746,7 +767,7 @@ class VisPluginTableModel {
         case 'pivot1':
           var pivotField = new ModelPivot({ vis: this, queryResponseField: header.modelField })
           var headerCell = new HeaderCell({ column: column, type: header.type, modelField: pivotField })
-          if (this.sortColsBy === 'measures') { headerCell.label = '' }
+          headerCell.label = ''  // TODO: Decide how (if) it makes sense to add pivot labels at top of dimension columns
           column.levels.push(headerCell)
           column.sort.push(0)
           break
@@ -798,7 +819,7 @@ class VisPluginTableModel {
 
             var reportInSetting = this.config['reportIn|' + column.modelField.name]
             if (typeof reportInSetting !== 'undefined' && reportInSetting !== '1') {
-              var unit = this.config.useUnit ? column.modelField.unit : ''
+              var unit = this.config.useUnit && column.modelField.unit !== '#' ? column.modelField.unit : ''
               cell.html = null
               cell.value = Math.round(cell.value / parseInt(reportInSetting))
               cell.rendered = column.modelField.value_format === '' ? cell.value.toString() : unit + SSF.format(column.modelField.value_format, cell.value)
@@ -841,7 +862,7 @@ class VisPluginTableModel {
 
         var reportInSetting = this.config['reportIn|' + column.modelField.name]
         if (typeof reportInSetting !== 'undefined'  && reportInSetting !== '1') {
-          var unit = this.config.useUnit ? column.modelField.unit : ''
+          var unit = this.config.useUnit && column.modelField.unit !== '#'  ? column.modelField.unit : ''
           cell.html = null
           cell.value = Math.round(cell.value / parseInt(reportInSetting))
           cell.rendered = column.modelField.value_format === '' ? cell.value.toString() : unit + SSF.format(column.modelField.value_format, cell.value)
@@ -965,7 +986,7 @@ class VisPluginTableModel {
 
         var reportInSetting = this.config['reportIn|' + column.modelField.name]
         if (typeof reportInSetting !== 'undefined'  && reportInSetting !== '1') {
-          var unit = this.config.useUnit ? column.modelField.unit : ''
+          var unit = this.config.useUnit && column.modelField.unit !== '#'  ? column.modelField.unit : ''
           cellValue.html = undefined
           cellValue.value = Math.round(cellValue.value / parseInt(reportInSetting))
           cellValue.rendered = column.modelField.value_format === '' ? cellValue.value.toString() : unit + SSF.format(column.modelField.value_format, cellValue.value)
@@ -1108,6 +1129,9 @@ class VisPluginTableModel {
           for (var t_ = t; t_ < tiers.length; t_++) {
             var tier_ = tiers[t_]
             leaf.data[tier_.name].rowspan = span_tracker[tier_.name]
+            if (leaf.data[tier_.name].rowspan > 1) {
+              leaf.data[tier_.name].cell_style.push('merged')
+            }
             span_tracker[tier_.name] = 1
           }
           break;
@@ -1219,7 +1243,7 @@ class VisPluginTableModel {
               subtotal_value = subtotal_value / subtotal_items
             }
             if (subtotal_value) {
-              var unit = this.config.useUnit ? column.modelField.unit : ''
+              var unit = this.config.useUnit && column.modelField.unit !== '#'  ? column.modelField.unit : ''
               rendered = column.modelField.value_format === '' ? subtotal_value.toString() : unit + SSF.format(column.modelField.value_format, subtotal_value)
             }
             if (column.modelField.calculation_type === 'string') {
@@ -1497,6 +1521,7 @@ class VisPluginTableModel {
    * if comparing this year to last year, there are two "Reporting Period" values but only one variance.
    */
   addVarianceColumns () {
+    console.log('dataTable', this)
     var variance_colpairs = []
     var calcs = ['absolute', 'percent']
     
@@ -1675,6 +1700,7 @@ class VisPluginTableModel {
             leaf.data[tier_.type].colspan = span_tracker[tier_.type]
             if (leaf.data[tier_.type].colspan > 1) {
               leaf.data[tier_.type].align = 'center'
+              leaf.data[tier_.type].cell_style.push('merged')
             }
             span_tracker[tier_.type] = 1
           }
@@ -1765,6 +1791,7 @@ class VisPluginTableModel {
           column: transposedColumn, 
           type: header.type, 
           label: sourceCell.rendered === '' ? sourceCell.rendered : sourceCell.rendered || sourceCell.value, 
+          align: 'center'
         })
         headerCell.colspan = sourceCell.rowspan
         headerCell.rowspan = sourceCell.colspan

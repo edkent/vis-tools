@@ -100,7 +100,7 @@ class ModelMeasure extends ModelField {
 }
 
 class HeaderCell {
-  constructor({ column, type, label = null, align = 'center', modelField = { name: '', label: '', view: '' }, pivotData = {} } = { column, type, label, align, modelField, pivotData }) {
+  constructor({ column, type, label = null, align = '', modelField = { name: '', label: '', view: '' }, pivotData = {} } = { column, type, label, align, modelField, pivotData }) {
     this.id = [column.id, type].join('.')
     this.column = column
     this.type = type
@@ -110,7 +110,7 @@ class HeaderCell {
     this.cell_style = ['headerCell']
     this.label = label
 
-    this.align = this.column.modelField.is_numeric ? 'right' : 'left'
+    this.align = align ? align : this.column.modelField.is_numeric ? 'right' : 'left'
 
     // if (column.vis.sortColsBy === 'pivots') {
     //   if (type.startsWith 'pivot') {
