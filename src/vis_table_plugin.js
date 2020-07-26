@@ -2144,13 +2144,20 @@ class VisPluginTableModel {
   }
 
   getCellToolTip (rowid, colid) {
+    console.log('getCellToolTip()')
+
     var tipHTML = '<table><tbody>'
-    var rowid = this.transposeTable ? colid : rowid
-    var colid = this.transposeTable ? rowid : colid
+
+    console.log('rowid', rowid)
+    console.log('colid', colid)
 
     var row = this.getRowById(rowid)
     var focusColumn = this.getColumnById(colid) 
     var field = focusColumn.modelField 
+
+    console.log('row', row)
+    console.log('focusColumn', focusColumn)
+    console.log('field', field)
 
     if (row.type === 'total') {
       var label = 'TOTAL'
