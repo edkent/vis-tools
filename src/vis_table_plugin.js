@@ -1129,9 +1129,9 @@ class VisPluginTableModel {
           for (var t_ = t; t_ < tiers.length; t_++) {
             var tier_ = tiers[t_]
             leaf.data[tier_.name].rowspan = span_tracker[tier_.name]
-            if (leaf.data[tier_.name].rowspan > 1) {
-              leaf.data[tier_.name].cell_style.push('merged')
-            }
+            // if (leaf.data[tier_.name].rowspan > 1) {
+            //   leaf.data[tier_.name].cell_style.push('merged')
+            // }
             span_tracker[tier_.name] = 1
           }
           break;
@@ -1900,6 +1900,20 @@ class VisPluginTableModel {
     return column
   }
 
+  /**
+   * Returns row that matches ID provided
+   * @param {*} id 
+   */
+  getRowById (id) {
+    var row = {}
+    this.data.forEach(r => {
+      if (id === r.id) {
+        row = r
+      }
+    })
+    return row
+  }
+
   getMeasureByName (name) {
     var measure = ''
     this.measures.forEach(m => {
@@ -2092,6 +2106,34 @@ class VisPluginTableModel {
     }
 
     return columnGroups
+  }
+
+  getCellToolTip (rowid, colid) {
+    var tipHTML = ''
+    var rowid = this.transposeTable ? colid : rowid
+    var colid = this.transposeTable ? rowid : colid
+
+    var row = this.getRowById(rowid)
+    var measure = this.getColumnById(colid).modelField 
+
+    console.log('getCellToolTip row, measure', row, measure)
+
+    this.dimensions.forEach(dimension => {
+      var label = dimension.name
+      var value = row.data[dimension.name].value
+      tipHTML += ["<p><em>", label, ":</em> ", value, "</p>"].join('')
+    })
+
+    tipHTML += '<br>'
+
+    var measureColumns = this.columns.filter(c => c.modelField === measure)
+    measureColumns.forEach(column => {
+      var label = column.id
+      var value = row.data[column.id].value
+      tipHTML += ["<p><em>", label, ":</em> ", value, "</p>"].join('')
+    })
+
+    return tipHTML
   }
 }
 
