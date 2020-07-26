@@ -826,7 +826,7 @@ class VisPluginTableModel {
             if (typeof cell.cell_style === 'undefined') {
               cell.cell_style = ['total', 'subtotal']
             } else {
-              cell.cell_style.concat(['total', 'subtotal'])
+              cell.cell_style = cell.cell_style.concat(['total', 'subtotal'])
             }
             if (typeof column.modelField.style !== 'undefined') {
               cell.cell_style = cell.cell_style.concat(column.modelField.style)
@@ -1055,7 +1055,7 @@ class VisPluginTableModel {
             othersStyle.push('measure')
           } else {
             othersValue = (totalValue.value + column.series.series.avg) / 2
-            othersStyle.concat(['estimate', 'measure'])
+            othersStyle = othersStyle.concat(['estimate', 'measure'])
             if (['count', 'count_distinct'].includes(column.modelField.calculation_type)) {
               othersValue = Math.round(othersValue)
             }
@@ -2149,13 +2149,17 @@ class VisPluginTableModel {
       var value = ''
       var rowClass = 'focus'
       tipHTML += ['<tr class="', rowClass, '"><td><span style="float:left"><em>', label, ':</em></td><td></span><span style="float:left"> ', value, '</span></td></tr>'].join('')
+    } else if (row.id.startsWith('Others')) {
+      var label = 'Others'
+      var value = ''
+      var rowClass = 'focus'
+      tipHTML += ['<tr class="', rowClass, '"><td><span style="float:left"><em>', label, ':</em></td><td></span><span style="float:left"> ', value, '</span></td></tr>'].join('')      
     } else if (row.type === 'subtotal') {
       var label = 'SUBTOTAL'
       var rowClass = 'focus'
       var subtotalColumn = this.columns.filter(c => !c.hide).filter(c => c.modelField.type === 'dimension')[0]
       var value = row.data[subtotalColumn.id].render || row.data[subtotalColumn.id].value
       tipHTML += ['<tr class="', rowClass, '"><td><span style="float:left"><em>', label, ':</em></td><td></span><span style="float:left"> ', value, '</span></td></tr>'].join('')
-
     } else {
       var dimensionColumns = this.columns
       .filter(c => c.id !== '$$$_index_$$$')
@@ -2171,6 +2175,7 @@ class VisPluginTableModel {
   
     tipHTML += '<tr style="height:10px"></tr>' // spacer row
 
+    var includesEstimate = false
     var measureColumns = this.columns
       .filter(c => c.modelField.type === 'measure')
       .filter(c => c.modelField === field)
@@ -2179,8 +2184,16 @@ class VisPluginTableModel {
       var label = column.getHeaderCellLabelByType('field')
       var value = row.data[column.id].rendered || row.data[column.id].value
       var rowClass = column.id === focusColumn.id ? 'focus' : ''
+      if (row.data[column.id].cell_style.includes('estimate')) {
+        includesEstimate = true
+      }
       tipHTML += ['<tr class="', rowClass, '"><td><span style="float:left"><em>', label, ':</em></td><td></span><span style="float:right"> ', value, '</span></td></tr>'].join('')
     })
+
+    if (includesEstimate) {
+      tipHTML += '<tr><td colspan=2><span style="color:red">Estimated figure due to query exceeding row limit.</span></td></tr>'
+      tipHTML += '<tr><td colspan=2><span style="color:red">Consider increasing the row limit or using an alternative measure.</span></td></tr>'
+    }
 
     tipHTML += '</tbody><table>'
 
