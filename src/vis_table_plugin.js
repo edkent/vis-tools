@@ -39,7 +39,7 @@ const tableModelCoreOptions = {
   minWidthForIndexColumns: {
     section: 'Theme',
     type: 'boolean',
-    label: "Automatc column width on index",
+    label: "Automatic column width on index",
     default: true,
     order: 3.5
   },
@@ -58,6 +58,22 @@ const tableModelCoreOptions = {
     label: 'Body Size',
     default: 12,
     order: 5,
+  },
+  showTooltip: {
+    section: 'Theme',
+    type: 'boolean',
+    display_size: 'half',
+    label: "Show tooltip",
+    default: true,
+    order: 6
+  },
+  showHighlight: {
+    section: 'Theme',
+    type: 'boolean',
+    display_size: 'half',
+    label: "Show highlight",
+    default: true,
+    order: 7
   },
 
   columnOrder: {},
@@ -214,6 +230,8 @@ class VisPluginTableModel {
     this.fieldLevel = 0 // set in addPivotsAndHeaders()
     this.groupVarianceColumns = config.groupVarianceColumns || false
     this.minWidthForIndexColumns = config.minWidthForIndexColumns || false
+    this.showTooltip = config.showTooltip || false
+    this.showHighlight = config.showHighlight || false
 
     this.hasTotals = typeof queryResponse.totals_data !== 'undefined' ? true : false
     this.calculateOthers = typeof queryResponse.truncated !== 'undefined' ? queryResponse.truncated && config.calculateOthers : false 
@@ -842,7 +860,13 @@ class VisPluginTableModel {
 
       this.columns.forEach(column => {
         var cellValue = (column.pivoted || column.isRowTotal)? lookerRow[column.modelField.name][column.pivot_key] : lookerRow[column.id]
-        var cell = new DataCell({ ...cellValue, ...{ colid: column.id, rowid: row.id } })
+        var cell = new DataCell({ 
+          ...cellValue, 
+          ...{ 
+            cell_style: [column.modelField.type], 
+            colid: column.id, 
+            rowid: row.id } 
+        })
 
         if (column.modelField.is_numeric) {
           cell.cell_style.push('numeric')
@@ -893,7 +917,7 @@ class VisPluginTableModel {
           value: sourceCell.value,
           rendered: sourceCell.rendered,
           html: sourceCell.html,
-          cell_style: ['singleIndex'],
+          cell_style: ['singleIndex', 'dimension'],
           align: this.dimensions[this.dimensions.length - 1].is_numeric ? 'right' : 'left',
           colid: '$$$_index_$$$',
           rowid: sourceCell.rowid
@@ -952,7 +976,7 @@ class VisPluginTableModel {
         }
         totalsRow.data[column.id] = new DataCell({ 
           value: '', 
-          cell_style: ['total'],
+          cell_style: ['total', 'dimension'],
           rowspan: rowspan, 
           colspan: colspan,
           colid: column.id,
@@ -966,7 +990,7 @@ class VisPluginTableModel {
       
       
       if (column.modelField.type === 'measure') {
-        var cell_style = column.modelField.is_numeric ? ['total', 'numeric'] : ['total', 'nonNumeric']
+        var cell_style = column.modelField.is_numeric ? ['total', 'numeric', 'measure'] : ['total', 'nonNumeric', 'measure']
         var cellValue = (column.pivoted || column.isRowTotal) ? totals_[column.modelField.name][column.pivot_key] : totals_[column.id]
 
         cellValue = new DataCell({ 
@@ -1028,13 +1052,16 @@ class VisPluginTableModel {
         if (column.modelField.type === 'measure') {
           if (othersValue = ['sum', 'count'].includes(column.modelField.calculation_type)) {
             othersValue = totalValue.value - column.series.series.sum
+            othersStyle.push('measure')
           } else {
             othersValue = (totalValue.value + column.series.series.avg) / 2
-            othersStyle.push('estimate')
+            othersStyle.concat(['estimate', 'measure'])
             if (['count', 'count_distinct'].includes(column.modelField.calculation_type)) {
               othersValue = Math.round(othersValue)
             }
           }
+        } else {
+          othersStyle.push('dimension')
         }
 
         if (othersValue) {
@@ -1129,9 +1156,9 @@ class VisPluginTableModel {
           for (var t_ = t; t_ < tiers.length; t_++) {
             var tier_ = tiers[t_]
             leaf.data[tier_.name].rowspan = span_tracker[tier_.name]
-            // if (leaf.data[tier_.name].rowspan > 1) {
-            //   leaf.data[tier_.name].cell_style.push('merged')
-            // }
+            if (leaf.data[tier_.name].rowspan > 1) {
+              leaf.data[tier_.name].cell_style.push('merged')
+            }
             span_tracker[tier_.name] = 1
           }
           break;
@@ -1198,7 +1225,7 @@ class VisPluginTableModel {
             var rowspan = -1
             var colspan = -1
           }
-          var cell_style = column.modelField.is_numeric ? ['total', 'subtotal', 'numeric'] : ['total', 'subtotal', 'nonNumeric']
+          var cell_style = column.modelField.is_numeric ? ['total', 'subtotal', 'numeric', 'dimension'] : ['total', 'subtotal', 'nonNumeric', 'dimension']
           var cell = new DataCell({ 
             'cell_style': cell_style, 
             align: column.modelField.is_numeric ? 'right' : 'left', 
@@ -1215,7 +1242,7 @@ class VisPluginTableModel {
         }
 
         if (column.modelField.type == 'measure') {
-          var cell_style = column.modelField.is_numeric ? ['total', 'subtotal', 'numeric'] : ['total', 'subtotal', 'nonNumeric']
+          var cell_style = column.modelField.is_numeric ? ['total', 'subtotal', 'numeric', 'measure'] : ['total', 'subtotal', 'nonNumeric', 'measure']
           var align = column.modelField.is_numeric ? 'right' : 'left'
           if (Object.entries(this.subtotals_data).length > 0 && !subtotalRow.id.startsWith('Subtotal|Others')) { // if subtotals already provided in Looker's queryResponse
             var cell = new DataCell({ 
@@ -1369,7 +1396,7 @@ class VisPluginTableModel {
     // CALCULATE COLUMN SUB TOTAL VALUES
     this.data.forEach(row => {
       subtotalColumns.forEach(subtotalColumn => {
-        var cell_style = subtotalColumn.modelField.is_numeric ? ['subtotal', 'numeric'] : ['subtotal', 'nonNumeric']
+        var cell_style = subtotalColumn.modelField.is_numeric ? ['subtotal', 'numeric', 'measure'] : ['subtotal', 'nonNumeric', 'measure']
         var subtotal_value = 0
         subtotalColumn.subtotal_data.columns.forEach(column => { // subtotalColumn.columns i.e. the individual columns that are aggregated into a single subtotal columns
           subtotal_value += row.data[column.id].value
@@ -1406,7 +1433,7 @@ class VisPluginTableModel {
         var cell = new DataCell({
           value: baseline_value - comparison_value,
           rendered: value_format === '' ? (baseline_value - comparison_value).toString() : SSF.format(value_format, (baseline_value - comparison_value)),
-          cell_style: ['numeric'],
+          cell_style: ['numeric', 'measure', 'variance', 'varianceAbsolute'],
           colid: id,
           rowid: row.id
         })
@@ -1416,7 +1443,7 @@ class VisPluginTableModel {
           var cell = new DataCell({
             value: null,
             rendered: '∞',
-            cell_style: ['numeric'],
+            cell_style: ['numeric', 'measure', 'variance', 'variancePercent'],
             colid: id,
             rowid: row.id
           })
@@ -2109,29 +2136,53 @@ class VisPluginTableModel {
   }
 
   getCellToolTip (rowid, colid) {
-    var tipHTML = ''
+    var tipHTML = '<table><tbody>'
     var rowid = this.transposeTable ? colid : rowid
     var colid = this.transposeTable ? rowid : colid
 
     var row = this.getRowById(rowid)
-    var measure = this.getColumnById(colid).modelField 
+    var focusColumn = this.getColumnById(colid) 
+    var field = focusColumn.modelField 
 
-    console.log('getCellToolTip row, measure', row, measure)
+    if (row.type === 'total') {
+      var label = 'TOTAL'
+      var value = ''
+      var rowClass = 'focus'
+      tipHTML += ['<tr class="', rowClass, '"><td><span style="float:left"><em>', label, ':</em></td><td></span><span style="float:left"> ', value, '</span></td></tr>'].join('')
+    } else if (row.type === 'subtotal') {
+      var label = 'SUBTOTAL'
+      var rowClass = 'focus'
+      var subtotalColumn = this.columns.filter(c => !c.hide).filter(c => c.modelField.type === 'dimension')[0]
+      var value = row.data[subtotalColumn.id].render || row.data[subtotalColumn.id].value
+      tipHTML += ['<tr class="', rowClass, '"><td><span style="float:left"><em>', label, ':</em></td><td></span><span style="float:left"> ', value, '</span></td></tr>'].join('')
 
-    this.dimensions.forEach(dimension => {
-      var label = dimension.name
-      var value = row.data[dimension.name].value
-      tipHTML += ["<p><em>", label, ":</em> ", value, "</p>"].join('')
+    } else {
+      var dimensionColumns = this.columns
+      .filter(c => c.id !== '$$$_index_$$$')
+      .filter(c => c.modelField.type === 'dimension')
+
+      dimensionColumns.forEach(column => {
+        var label = column.getHeaderCellLabelByType('field')
+        var value = row.data[column.id].rendered || row.data[column.id].value
+        var rowClass = column.id === focusColumn.id ? 'focus' : ''
+        tipHTML += ['<tr class="', rowClass, '"><td><span style="float:left"><em>', label, ':</em></td><td></span><span style="float:left"> ', value, '</span></td></tr>'].join('')
+      })
+    }
+  
+    tipHTML += '<tr style="height:10px"></tr>' // spacer row
+
+    var measureColumns = this.columns
+      .filter(c => c.modelField.type === 'measure')
+      .filter(c => c.modelField === field)
+    
+      measureColumns.forEach(column => {
+      var label = column.getHeaderCellLabelByType('field')
+      var value = row.data[column.id].rendered || row.data[column.id].value
+      var rowClass = column.id === focusColumn.id ? 'focus' : ''
+      tipHTML += ['<tr class="', rowClass, '"><td><span style="float:left"><em>', label, ':</em></td><td></span><span style="float:right"> ', value, '</span></td></tr>'].join('')
     })
 
-    tipHTML += '<br>'
-
-    var measureColumns = this.columns.filter(c => c.modelField === measure)
-    measureColumns.forEach(column => {
-      var label = column.id
-      var value = row.data[column.id].value
-      tipHTML += ["<p><em>", label, ":</em> ", value, "</p>"].join('')
-    })
+    tipHTML += '</tbody><table>'
 
     return tipHTML
   }
