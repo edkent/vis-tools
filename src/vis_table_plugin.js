@@ -716,7 +716,6 @@ class VisPluginTableModel {
    *  option is either 'no_variance' or a measure.name
    */
   checkVarianceCalculations() {
-    console.log('config', this.config)
     Object.keys(this.config).forEach(option => {
       if (option.startsWith('comparison')) {
         var baseline = option.split('|')[1]
@@ -1548,7 +1547,6 @@ class VisPluginTableModel {
    * if comparing this year to last year, there are two "Reporting Period" values but only one variance.
    */
   addVarianceColumns () {
-    console.log('dataTable', this)
     var variance_colpairs = []
     var calcs = ['absolute', 'percent']
     
@@ -1787,6 +1785,7 @@ class VisPluginTableModel {
           column: transposedColumn,
           type: sourceCell.type,
           label: sourceCell.label,
+          cell_style: sourceCell.cell_style,
           align: sourceCell.align,
           modelField: sourceCell.modelField
         })
@@ -1794,6 +1793,10 @@ class VisPluginTableModel {
         headerCell.colspan = sourceCell.rowspan
         headerCell.id = [sourceCell.modelField.name, sourceCell.type].join('.')
         headerCell.cell_style.push('transposed')
+
+        if (headerCell.colspan > 0) {
+          headerCell.cell_style.push('merged')
+        }
 
         transposedColumn.levels.push(headerCell)
       })
@@ -1818,7 +1821,8 @@ class VisPluginTableModel {
           column: transposedColumn, 
           type: header.type, 
           label: sourceCell.rendered === '' ? sourceCell.rendered : sourceCell.rendered || sourceCell.value, 
-          align: 'center'
+          align: 'center',
+          cell_style: sourceCell.cell_style,
         })
         headerCell.colspan = sourceCell.rowspan
         headerCell.rowspan = sourceCell.colspan
@@ -1848,6 +1852,10 @@ class VisPluginTableModel {
           colid: column.id,
           rowid: this.headers[i].type
         })
+
+        if (cell.rowspan > 1) {
+          cell.cell_style.push('merged')
+        }
 
         transposedData[this.headers[i].type] = cell
       })
@@ -2175,22 +2183,43 @@ class VisPluginTableModel {
   
     tipHTML += '<tr style="height:10px"></tr>' // spacer row
 
-    var includesEstimate = false
+    var isReportedIn = null
+    var reportInLabels = {
+      1000: '000s',
+      1000000: 'Millions',
+      1000000000: 'Billions'
+    }
+    var isEstimate = false
     var measureColumns = this.columns
       .filter(c => c.modelField.type === 'measure')
       .filter(c => c.modelField === field)
     
-      measureColumns.forEach(column => {
-      var label = column.getHeaderCellLabelByType('field')
-      var value = row.data[column.id].rendered || row.data[column.id].value
-      var rowClass = column.id === focusColumn.id ? 'focus' : ''
-      if (row.data[column.id].cell_style.includes('estimate')) {
-        includesEstimate = true
+    measureColumns.forEach(column => {
+      if ((!column.pivoted && !column.isRowTotal) || (column.pivot_key === focusColumn.pivot_key)) {
+        var label = column.getHeaderCellLabelByType('field')
+        var value = row.data[column.id].rendered || row.data[column.id].value
+        var rowClass = column.id === focusColumn.id ? 'focus' : ''
+        var reportInSetting = this.config['reportIn|' + column.modelField.name]
+
+        if (typeof reportInSetting !== 'undefined'  && reportInSetting !== '1') {
+          isReportedIn = label + ' reported in ' + reportInLabels[reportInSetting]
+        }
+        if (row.data[column.id].cell_style.includes('estimate')) {
+          isEstimate = true
+        }
+
+        tipHTML += ['<tr class="', rowClass, '"><td><span style="float:left"><em>', label, ':</em></td><td></span><span style="float:right"> ', value, '</span></td></tr>'].join('')
       }
-      tipHTML += ['<tr class="', rowClass, '"><td><span style="float:left"><em>', label, ':</em></td><td></span><span style="float:right"> ', value, '</span></td></tr>'].join('')
     })
 
-    if (includesEstimate) {
+    if (isReportedIn || isEstimate) {
+      tipHTML += '<tr style="height:10px"></tr>' // spacer row
+    }
+
+    if (isReportedIn) {
+      tipHTML += '<tr><td colspan=2><span style="color:darkgrey">' + isReportedIn + '.</span></td></tr>'
+    }
+    if (isEstimate) {
       tipHTML += '<tr><td colspan=2><span style="color:red">Estimated figure due to query exceeding row limit.</span></td></tr>'
       tipHTML += '<tr><td colspan=2><span style="color:red">Consider increasing the row limit or using an alternative measure.</span></td></tr>'
     }

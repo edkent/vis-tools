@@ -100,14 +100,14 @@ class ModelMeasure extends ModelField {
 }
 
 class HeaderCell {
-  constructor({ column, type, label = null, align = '', modelField = { name: '', label: '', view: '' }, pivotData = {} } = { column, type, label, align, modelField, pivotData }) {
+  constructor({ column, type, label = null, align = '', cell_style = [], modelField = { name: '', label: '', view: '' }, pivotData = {} } = { column, type, label, align, cell_style, modelField, pivotData }) {
     this.id = [column.id, type].join('.')
     this.column = column
     this.type = type
     this.colspan = 1
     this.rowspan = 1
     this.headerRow = true
-    this.cell_style = ['headerCell']
+    this.cell_style = ['headerCell'].concat(cell_style)
     this.label = label
 
     this.align = align ? align : this.column.modelField.is_numeric ? 'right' : 'left'
