@@ -226,6 +226,10 @@ class DataCell {
       this.colid = colid
       this.rowid = rowid
       this.id = colid && rowid ? [colid, rowid].join('.') : null
+
+      if (this.value === null && this.rendered !== '∞') {
+        this.rendered = '∅'
+      }
     }
 }
 

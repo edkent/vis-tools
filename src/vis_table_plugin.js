@@ -879,10 +879,6 @@ class VisPluginTableModel {
           cell.cell_style = cell.cell_style.concat(column.modelField.style)
         }
 
-        if (cell.value === null) {
-          cell.rendered = ''
-        }
-
         var reportInSetting = this.config['reportIn|' + column.modelField.name]
         if (typeof reportInSetting !== 'undefined'  && reportInSetting !== '1') {
           var unit = this.config.useUnit && column.modelField.unit !== '#'  ? column.modelField.unit : ''
@@ -2193,34 +2189,47 @@ class VisPluginTableModel {
   
     tipHTML += '<tr style="height:10px"></tr>' // spacer row
 
-    var isReportedIn = null
-    var reportInLabels = {
-      1000: '000s',
-      1000000: 'Millions',
-      1000000000: 'Billions'
-    }
     var isEstimate = false
+    var measureLabel = ''
     var measureColumns = this.columns
       .filter(c => c.modelField.type === 'measure')
       .filter(c => c.modelField === field)
     
     measureColumns.forEach(column => {
+      if (!column.isVariance) {
+        measureLabel = column.getHeaderCellLabelByType('field')
+      }
+
       if ((!column.pivoted && !column.isRowTotal) || (column.pivot_key === focusColumn.pivot_key)) {
         var label = column.getHeaderCellLabelByType('field')
-        var value = row.data[column.id].rendered || row.data[column.id].value
         var rowClass = column.id === focusColumn.id ? 'focus' : ''
-        var reportInSetting = this.config['reportIn|' + column.modelField.name]
-
-        if (typeof reportInSetting !== 'undefined'  && reportInSetting !== '1') {
-          isReportedIn = label + ' reported in ' + reportInLabels[reportInSetting]
+        
+        var cell = row.data[column.id]
+        var value = cell.rendered || cell.value
+        if (cell.html) { 
+          var parser = new DOMParser()
+          var parsed_html = parser.parseFromString(cell.html, 'text/html')
+          value = parsed_html.documentElement.textContent
         }
-        if (row.data[column.id].cell_style.includes('estimate')) {
+
+        if (cell.cell_style.includes('estimate')) {
           isEstimate = true
         }
 
         tipHTML += ['<tr class="', rowClass, '"><td><span style="float:left"><em>', label, ':</em></td><td></span><span style="float:right"> ', value, '</span></td></tr>'].join('')
       }
     })
+
+    var isReportedIn = null
+    var reportInSetting = this.config['reportIn|' + focusColumn.modelField.name]
+    var reportInLabels = {
+      1000: '000s',
+      1000000: 'Millions',
+      1000000000: 'Billions'
+    }
+    if (typeof reportInSetting !== 'undefined'  && reportInSetting !== '1') {
+      isReportedIn = measureLabel + ' reported in ' + reportInLabels[reportInSetting]
+    }
 
     if (isReportedIn || isEstimate) {
       tipHTML += '<tr style="height:10px"></tr>' // spacer row
@@ -2229,6 +2238,7 @@ class VisPluginTableModel {
     if (isReportedIn) {
       tipHTML += '<tr><td colspan=2><span style="color:darkgrey">' + isReportedIn + '.</span></td></tr>'
     }
+
     if (isEstimate) {
       tipHTML += '<tr><td colspan=2><span style="color:red">Estimated figure due to query exceeding row limit.</span></td></tr>'
       tipHTML += '<tr><td colspan=2><span style="color:red">Consider increasing the row limit or using an alternative measure.</span></td></tr>'
