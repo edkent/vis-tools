@@ -1,6 +1,6 @@
 {
   "name": "vis-tools",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Tools to help develop Looker data visualisations",
   "repository": "git@github.com:ContrastingSounds/vis-tools.git",
   "author": "Jon Walls <8075115+ContrastingSounds@users.noreply.github.com>",
