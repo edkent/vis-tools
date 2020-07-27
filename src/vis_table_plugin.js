@@ -164,6 +164,13 @@ const tableModelCoreOptions = {
     default: false,
     order: 10,
   },
+  genericLabelForSubtotals: {
+    section: 'Table',
+    type: 'boolean',
+    label: "Label all subtotal rows as 'Subtotal'",
+    default: false,
+    order: 11
+  },
   indexColumn: {
     section: "Dimensions",
     type: "boolean",
@@ -232,6 +239,7 @@ class VisPluginTableModel {
     this.minWidthForIndexColumns = config.minWidthForIndexColumns || false
     this.showTooltip = config.showTooltip || false
     this.showHighlight = config.showHighlight || false
+    this.genericLabelForSubtotals = config.genericLabelForSubtotals || false
 
     this.hasTotals = typeof queryResponse.totals_data !== 'undefined' ? true : false
     this.calculateOthers = typeof queryResponse.truncated !== 'undefined' ? queryResponse.truncated && config.calculateOthers : false 
@@ -1230,8 +1238,13 @@ class VisPluginTableModel {
             rowid: subtotalRow.id
           })
           if (column.id === '$$$_index_$$$' || column.id === this.firstVisibleDimension ) {
-            cell.value = subTotalGroup.join(' | ') ? subTotalGroup.join(' | ') : 'Others'
-            cell.rendered = cell.value
+            if (this.genericLabelForSubtotals) {
+              cell.value = 'Subtotal'
+              cell.rendered = 'Subtotal'
+            } else {
+              cell.value = subTotalGroup.join(' | ') ? subTotalGroup.join(' | ') : 'Others'
+              cell.rendered = cell.value
+            }
           }
           subtotalRow.data[column.id] = cell
         }
