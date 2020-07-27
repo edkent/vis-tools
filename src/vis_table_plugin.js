@@ -1251,7 +1251,6 @@ class VisPluginTableModel {
             })
             subtotalRow.data[column.id] = cell
           } else {
-            // var cellKey = column.pivoted ? [column.pivot_key, column.modelField.name].join('.') : column.id
             var subtotal_value = 0
             var subtotal_items = 0
             var rendered = ''
@@ -1837,27 +1836,40 @@ class VisPluginTableModel {
   }
 
   transposeColumnsIntoRows () { 
+    console.log('transposeColumnsIntoRows()...')
     this.columns.filter(c => c.modelField.type === 'measure').forEach(column => {
       var transposedData = {}
 
       // INDEX FIELDS // every index/dimension column in original table must be represented as a data cell in the new transposed rows
-      column.levels.forEach((level, i) => {
+      column.levels.forEach((level, i) => {        
         var cell = new DataCell({
           value: level.label,
           rendered: level.label,
           rowspan: level.colspan,
           colspan: level.rowspan,
-          cell_style: ['transposed', 'dimension'],
-          align: column.modelField.is_numeric ? 'right' : 'left',
+          cell_style: ['indexCell', 'transposed'],
+          align: 'left',
           colid: column.id,
-          rowid: this.headers[i].type
+          rowid: level.type
         })
+
+        switch (level.type) {
+          case 'pivot0':
+          case 'pivot1':
+            cell.cell_style.push('pivot')
+            break
+          case 'heading':
+          case 'field':
+            var style = column.modelField.is_table_calculation ? 'calculation' : 'measure'
+            cell.cell_style.push(style)
+            break
+        }
 
         if (cell.rowspan > 1) {
           cell.cell_style.push('merged')
         }
 
-        transposedData[this.headers[i].type] = cell
+        transposedData[level.type] = cell
       })
 
       // MEASURE FIELDS // every measure column in original table is converted to a data row
@@ -2144,20 +2156,11 @@ class VisPluginTableModel {
   }
 
   getCellToolTip (rowid, colid) {
-    console.log('getCellToolTip()')
-
     var tipHTML = '<table><tbody>'
-
-    console.log('rowid', rowid)
-    console.log('colid', colid)
 
     var row = this.getRowById(rowid)
     var focusColumn = this.getColumnById(colid) 
     var field = focusColumn.modelField 
-
-    console.log('row', row)
-    console.log('focusColumn', focusColumn)
-    console.log('field', field)
 
     if (row.type === 'total') {
       var label = 'TOTAL'
