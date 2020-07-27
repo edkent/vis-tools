@@ -1450,7 +1450,7 @@ class VisPluginTableModel {
           var cell = new DataCell({
             value: value,
             rendered: SSF.format('#0.00%', value),
-            cell_style: ['numeric'],
+            cell_style: ['numeric', 'measure', 'variance', 'variancePercent'],
             colid: id,
             rowid: row.id
           })
@@ -1501,7 +1501,7 @@ class VisPluginTableModel {
 
     column.pivoted = baseline.pivoted
     column.super = baseline.super
-    column.pivot_key = ''
+    column.pivot_key = baseline.pivot_key
 
     if (this.groupVarianceColumns) {    
         column.sort[0] = 1.5
