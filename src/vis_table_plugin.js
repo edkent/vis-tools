@@ -164,6 +164,13 @@ const tableModelCoreOptions = {
     default: false,
     order: 10,
   },
+  varianceForLastColumnPairOnly: {
+    section: "Table",
+    type: "boolean",
+    label: "Show Variance columns for last column pair only",
+    default: false,
+    order: 10,
+  },
   genericLabelForSubtotals: {
     section: 'Table',
     type: 'boolean',
@@ -236,6 +243,7 @@ class VisPluginTableModel {
     this.sortColsBy = config.sortColumnsBy || 'pivots' // matches to Column methods: pivots(), measures)
     this.fieldLevel = 0 // set in addPivotsAndHeaders()
     this.groupVarianceColumns = config.groupVarianceColumns || false
+    this.varianceForLastColumnPairOnly = config.varianceForLastColumnPairOnly || false
     this.minWidthForIndexColumns = config.minWidthForIndexColumns || false
     this.showTooltip = config.showTooltip || false
     this.showHighlight = config.showHighlight || false
@@ -1631,9 +1639,15 @@ class VisPluginTableModel {
       }
     })
 
-    variance_colpairs.forEach(colpair => {
-      this.createVarianceColumn(colpair)
-    })
+    if (this.varianceForLastColumnPairOnly) {
+      variance_colpairs.slice(-1).forEach(colpair => {
+        this.createVarianceColumn(colpair)
+      })
+    } else {
+      variance_colpairs.forEach(colpair => {
+        this.createVarianceColumn(colpair)
+      })
+    }
   }
 
   compareSortArrays (a, b) {
