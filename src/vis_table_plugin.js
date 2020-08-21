@@ -1568,6 +1568,7 @@ class VisPluginTableModel {
     
     Object.keys(this.variances).forEach(v => {
       var variance = this.variances[v]
+
       if (variance.comparison !== 'no_variance') {          
         if (variance.type === 'vs_measure') {
           if (!this.hasPivots) {
@@ -1578,7 +1579,8 @@ class VisPluginTableModel {
               })
             })
           } else {
-            this.pivot_values.forEach(pivot_value => {
+            var pivot_values = this.varianceForLastColumnPairOnly ? this.pivot_values.slice(-1) : this.pivot_values
+            pivot_values.forEach(pivot_value => {
               if (!pivot_value.is_total) {
                 calcs.forEach(calc => {
                   variance_colpairs.push({
@@ -1596,7 +1598,8 @@ class VisPluginTableModel {
           }
         } else if (variance.type === 'by_pivot') { 
           if (this.pivot_fields.length === 1 || this.pivot_fields[1].name === variance.comparison) {
-            this.pivot_values.slice(1).forEach((pivot_value, index) => {
+            var pivot_values = this.varianceForLastColumnPairOnly ? this.pivot_values.slice(-1) : this.pivot_values.slice(1)
+            pivot_values.forEach((pivot_value, index) => {
               calcs.forEach(calc => {
                 if (!pivot_value.is_total) {
                   variance_colpairs.push({
@@ -1639,15 +1642,10 @@ class VisPluginTableModel {
       }
     })
 
-    if (this.varianceForLastColumnPairOnly) {
-      variance_colpairs.slice(-1).forEach(colpair => {
+    variance_colpairs.forEach(colpair => {
         this.createVarianceColumn(colpair)
       })
-    } else {
-      variance_colpairs.forEach(colpair => {
-        this.createVarianceColumn(colpair)
-      })
-    }
+
   }
 
   compareSortArrays (a, b) {
