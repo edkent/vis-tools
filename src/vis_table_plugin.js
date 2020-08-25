@@ -75,6 +75,23 @@ const tableModelCoreOptions = {
     default: true,
     order: 7
   },
+  varNumFormat: {
+    section: 'Theme',
+    type: 'string',
+    display_size: 'half',
+    label: "Var # format",
+    default: "0;(0)",
+    order: 8
+  },
+  varPctFormat: {
+    section: 'Theme',
+    type: 'string',
+    display_size: 'half',
+    label: "Var % format",
+    default: "0%;(0%)",
+    order: 9
+  },
+
 
   columnOrder: {},
   
@@ -247,6 +264,8 @@ class VisPluginTableModel {
     this.minWidthForIndexColumns = config.minWidthForIndexColumns || false
     this.showTooltip = config.showTooltip || false
     this.showHighlight = config.showHighlight || false
+    this.varNumFormat = config.varNumFormat || ""
+    this.varPctFormat = config.varPctFormat || ""
     this.genericLabelForSubtotals = config.genericLabelForSubtotals || false
 
     this.hasTotals = typeof queryResponse.totals_data !== 'undefined' ? true : false
@@ -453,60 +472,6 @@ class VisPluginTableModel {
         default: false,
         order: 100 + i * 10 + 6,
       }
-
-      newOptions['var_num|' + measure.name] = {
-        section: 'Measures',
-        type: 'boolean',
-        label: 'Var #',
-        display_size: 'third',
-        default: true,
-        order: 100 + i * 10 + 7,
-      }
-
-      newOptions['var_pct|' + measure.name] = {
-        section: 'Measures',
-        type: 'boolean',
-        label: 'Var %',
-        display_size: 'third',
-        default: false,
-        order: 100 + i * 10 + 8,
-      }
-
-      newOptions['var_num_title|' + measure.name] = {
-        section: 'Measures',
-        type: 'string',
-        label: 'Var %',
-        display_size: 'third',
-        default: false,
-        order: 100 + i * 10 + 9,
-      }
-
-      newOptions['var_num_format|' + measure.name] = {
-        section: 'Measures',
-        type: 'string',
-        label: 'Var %',
-        display_size: 'third',
-        default: false,
-        order: 100 + i * 10 + 9.5,
-      }
-
-      newOptions['var_pct_title|' + measure.name] = {
-        section: 'Measures',
-        type: 'string',
-        label: 'Var %',
-        display_size: 'third',
-        default: false,
-        order: 100 + i * 10 + 10,
-      }
-      newOptions['var_pct_format|' + measure.name] = {
-        section: 'Measures',
-        type: 'string',
-        label: 'Var %',
-        display_size: 'third',
-        default: false,
-        order: 100 + i * 10 + 10.5,
-      }
-
 
     })
     return newOptions
@@ -1484,7 +1449,7 @@ class VisPluginTableModel {
       if (calc === 'absolute') {
         var cell = new DataCell({
           value: baseline_value - comparison_value,
-          rendered: value_format === '' ? (baseline_value - comparison_value).toString() : SSF.format(value_format, (baseline_value - comparison_value)),
+          rendered: this.varNumFormat === '' ? SSF.format(value_format, (baseline_value - comparison_value)) : SSF.format(this.varNumFormat, (baseline_value - comparison_value)),
           cell_style: ['numeric', 'measure', 'variance', 'varianceAbsolute'],
           colid: id,
           rowid: row.id
@@ -1502,7 +1467,7 @@ class VisPluginTableModel {
         } else {
           var cell = new DataCell({
             value: value,
-            rendered: SSF.format('#0.00%', value),
+            rendered: SSF.format(this.varPctFormat, value),
             cell_style: ['numeric', 'measure', 'variance', 'variancePercent'],
             colid: id,
             rowid: row.id
