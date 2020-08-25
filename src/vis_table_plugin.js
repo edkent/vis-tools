@@ -164,10 +164,10 @@ const tableModelCoreOptions = {
     default: false,
     order: 10,
   },
-  varianceForLastColumnPairOnly: {
+  varianceForLastPivotColumnOnly: {
     section: "Table",
     type: "boolean",
-    label: "Show Variance columns for last column pair only",
+    label: "Show Variance columns for last pivot column only",
     default: false,
     order: 10,
   },
@@ -243,7 +243,7 @@ class VisPluginTableModel {
     this.sortColsBy = config.sortColumnsBy || 'pivots' // matches to Column methods: pivots(), measures)
     this.fieldLevel = 0 // set in addPivotsAndHeaders()
     this.groupVarianceColumns = config.groupVarianceColumns || false
-    this.varianceForLastColumnPairOnly = config.varianceForLastColumnPairOnly || false
+    this.varianceForLastPivotColumnOnly = config.varianceForLastPivotColumnOnly || false
     this.minWidthForIndexColumns = config.minWidthForIndexColumns || false
     this.showTooltip = config.showTooltip || false
     this.showHighlight = config.showHighlight || false
@@ -471,6 +471,43 @@ class VisPluginTableModel {
         default: false,
         order: 100 + i * 10 + 8,
       }
+
+      newOptions['var_num_title|' + measure.name] = {
+        section: 'Measures',
+        type: 'string',
+        label: 'Var %',
+        display_size: 'third',
+        default: false,
+        order: 100 + i * 10 + 9,
+      }
+
+      newOptions['var_num_format|' + measure.name] = {
+        section: 'Measures',
+        type: 'string',
+        label: 'Var %',
+        display_size: 'third',
+        default: false,
+        order: 100 + i * 10 + 9.5,
+      }
+
+      newOptions['var_pct_title|' + measure.name] = {
+        section: 'Measures',
+        type: 'string',
+        label: 'Var %',
+        display_size: 'third',
+        default: false,
+        order: 100 + i * 10 + 10,
+      }
+      newOptions['var_pct_format|' + measure.name] = {
+        section: 'Measures',
+        type: 'string',
+        label: 'Var %',
+        display_size: 'third',
+        default: false,
+        order: 100 + i * 10 + 10.5,
+      }
+
+
     })
     return newOptions
   }
@@ -1579,8 +1616,7 @@ class VisPluginTableModel {
               })
             })
           } else {
-            var pivot_values = this.varianceForLastColumnPairOnly ? this.pivot_values.slice(-1) : this.pivot_values
-            pivot_values.forEach(pivot_value => {
+            this.pivot_values.forEach(pivot_value => {
               if (!pivot_value.is_total) {
                 calcs.forEach(calc => {
                   variance_colpairs.push({
@@ -1598,7 +1634,8 @@ class VisPluginTableModel {
           }
         } else if (variance.type === 'by_pivot') { 
           if (this.pivot_fields.length === 1 || this.pivot_fields[1].name === variance.comparison) {
-            var pivot_values = this.varianceForLastColumnPairOnly ? this.pivot_values.slice(-1) : this.pivot_values.slice(1)
+            var pivot_values = this.varianceForLastPivotColumnOnly ? this.pivot_values.slice(1).slice(-1) : this.pivot_values.slice(1)
+            var comparisons = this.varianceForLastPivotColumnOnly ? this.pivot_values.slice(-2,-1) : this.pivot_values
             pivot_values.forEach((pivot_value, index) => {
               calcs.forEach(calc => {
                 if (!pivot_value.is_total) {
@@ -1606,7 +1643,7 @@ class VisPluginTableModel {
                     calc: calc,
                     variance: {
                       baseline: [pivot_value.key, variance.baseline].join('.'),
-                      comparison: [this.pivot_values[index].key, variance.baseline].join('.'),
+                      comparison: [comparisons[index].key, variance.baseline].join('.'),
                       reverse: variance.reverse,
                       type: variance.type
                     }

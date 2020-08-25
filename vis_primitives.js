@@ -1,2 +1,481 @@
-!function(e){var t={};function i(s){if(t[s])return t[s].exports;var l=t[s]={i:s,l:!1,exports:{}};return e[s].call(l.exports,l,l.exports,i),l.l=!0,l.exports}i.m=e,i.c=t,i.d=function(e,t,s){i.o(e,t)||Object.defineProperty(e,t,{enumerable:!0,get:s})},i.r=function(e){"undefined"!=typeof Symbol&&Symbol.toStringTag&&Object.defineProperty(e,Symbol.toStringTag,{value:"Module"}),Object.defineProperty(e,"__esModule",{value:!0})},i.t=function(e,t){if(1&t&&(e=i(e)),8&t)return e;if(4&t&&"object"==typeof e&&e&&e.__esModule)return e;var s=Object.create(null);if(i.r(s),Object.defineProperty(s,"default",{enumerable:!0,value:e}),2&t&&"string"!=typeof e)for(var l in e)i.d(s,l,function(t){return e[t]}.bind(null,l));return s},i.n=function(e){var t=e&&e.__esModule?function(){return e.default}:function(){return e};return i.d(t,"a",t),t},i.o=function(e,t){return Object.prototype.hasOwnProperty.call(e,t)},i.p="",i(i.s=0)}([function(e,t){class i{constructor({vis:e,queryResponseField:t}){this.vis=e,this.name=t.name,this.view=t.view_label||"",this.label=t.field_group_variant||t.label_short||t.label,this.is_numeric=void 0!==t.is_numeric&&t.is_numeric,this.is_array=["list","number_list","location","tier"].includes(t.type),this.value_format=t.value_format?t.value_format:"",this.geo_type="",("location"===t.type||t.map_layer)&&(this.geo_type="location"===t.type?"location":t.map_layer.name),this.hide=!1,void 0!==this.vis.config["hide|"+this.name]&&this.vis.config["hide|"+this.name]&&(this.hide=!0),this.style="";var i=this.vis.config["style|"+this.name];void 0!==i&&("hide"===i?this.hide=!0:this.style=i),this.heading="",this.short_name="",this.unit="",void 0!==t.tags&&t.tags.forEach(e=>{var t=e.split(":");if("vis-tools"===t[0])switch(t[1]){case"heading":this.heading=t[2];break;case"short_name":this.short_name=t[2];break;case"unit":this.unit=t[2];break;case"style":this.style=t[2]}})}}class s{constructor({keys:e,values:t,types:i=[]}){if(e.length===t.length){this.keys=e,this.values=t,this.types=i;var s=[],l=[];this.values.forEach((e,t)=>{this.types[t]=void 0!==i[t]?i[t]:"line_item","line_item"===this.types[t]?(s.push(e),l.push(e)):"subtotal"===this.types[t]&&l.push(e)}),this.min_for_display=Math.min(...l),this.max_for_display=Math.max(...l),this.min=Math.min(...s),this.max=Math.max(...s),this.sum=s.reduce((e,t)=>e+t,0),this.count=s.length,this.avg=s.length>0?this.sum/s.length:null}else console.log("Could not construct series, arrays were of different length.")}}t.newArray=function(e,t){for(var i=[],s=0;s<e;s++)i.push(t);return i},t.ModelDimension=class extends i{constructor({vis:e,queryResponseField:t}){super({vis:e,queryResponseField:t}),this.type="dimension",this.align="left"}},t.ModelPivot=class extends i{constructor({vis:e,queryResponseField:t}){super({vis:e,queryResponseField:t}),this.type="pivot",this.align="center"}},t.ModelMeasure=class extends i{constructor({vis:e,queryResponseField:t,can_pivot:i}){super({vis:e,queryResponseField:t}),this.type="measure",this.align="right",this.is_table_calculation=void 0!==t.is_table_calculation&&t.is_table_calculation,this.calculation_type=t.type,this.is_turtle=void 0!==t.is_turtle&&t.is_turtle,this.can_pivot=i}},t.CellSeries=class{constructor({column:e,row:t,sort_value:i,series:l}){this.column=e,this.row=t,this.sort_value=i,this.series=new s(l)}toString(){var e="";return this.series.keys.forEach((t,i)=>{e+=t+":";var s=""===this.column.modelField.value_format?this.series.values[i].toString():SSF.format(this.column.modelField.value_format,this.series.values[i]);e+=s+" "}),e}},t.ColumnSeries=class{constructor({column:e,is_numeric:t,series:i}){this.column=e,this.is_numeric=t,this.series=new s(i)}},t.HeaderCell=class{constructor({column:e,type:t,label:i=null,align:s="",cell_style:l=[],modelField:a={name:"",label:"",view:""},pivotData:r={}}={column:e,type:t,label:i,align:s,cell_style:l,modelField:a,pivotData:r}){this.id=[e.id,t].join("."),this.column=e,this.type=t,this.colspan=1,this.rowspan=1,this.headerRow=!0,this.cell_style=["headerCell"].concat(l),this.label=i,this.align=s||(this.column.modelField.is_numeric?"right":"left"),this.modelField=a,this.pivotData=r,a.type&&this.cell_style.push(a.type),a.is_table_calculation&&this.cell_style.push("calculation")}},t.DataCell=class{constructor({value:e,rendered:t=null,html:i=null,links:s=[],cell_style:l=[],align:a="right",rowspan:r=1,colspan:n=1,rowid:o="",colid:h=""}={}){this.value=e,this.rendered=t,this.html=i,this.links=s,this.cell_style=["rowCell"].concat(l),this.align=a,this.rowspan=r,this.colspan=n,this.colid=h,this.rowid=o,this.id=h&&o?[h,o].join("."):null,null===this.value&&"∞"!==this.rendered&&(this.rendered="∅")}},t.Row=class{constructor(e="line_item"){this.id="",this.hide=!1,this.type=e,this.sort=[],this.data={}}},t.Column=class{constructor(e,t,i){this.id=e,this.vis=t,this.modelField=i,this.transposed=!1,this.idx=0,this.pos=0,this.levels=[],this.pivot_key="",this.unit=i.unit||"",this.hide=i.hide||!1,this.isVariance=!1,this.variance_type=null,this.pivoted=!1,this.isRowTotal=!1,this.super=!1,this.subtotal=!1,this.subtotal_data={},this.series=null,this.sort=[],this.colspans=[]}getHeaderCellLabel(e){var t=this.levels[e];if(null!==t.label)var i=t.label;else{i=t.modelField.label;var s=this.vis.config["heading|"+t.modelField.name],l=this.vis.config["label|"+t.modelField.name];if("heading"===t.type)return i=void 0!==s&&s||t.modelField.heading;"field"===t.type&&(i=this.vis.useShortName&&t.modelField.short_name||t.modelField.label,void 0!==l&&l!==this.modelField.label&&(i=l||i),this.isVariance&&(i=this.vis.groupVarianceColumns?2===this.vis.pivot_values.length?"absolute"===this.variance_type?i+" #":i+" %":"absolute"===this.variance_type?i+" Var #":i+" Var %":"absolute"===this.variance_type?"Var #":"Var %"),void 0!==this.vis.useViewName&&this.vis.useViewName&&(i=[this.modelField.view,i].join(" "))),"pivot"===t.type&&this.isVariance&&this.vis.groupVarianceColumns&&(i=2===this.vis.pivot_values.length?"Variance":"Var "+i)}return i}getHeaderCellLabelByType(e){for(var t=0;t<this.vis.headers.length;t++)if(e===this.vis.headers[t].type)return this.getHeaderCellLabel(t);return null}setHeaderCellLabels(){this.levels.forEach((e,t)=>{e.label=null===e.label?this.getHeaderCellLabel(t):e.label})}getHeaderData(){var e={};return this.modelField.vis.headers.forEach((t,i)=>{e[t.type]=this.levels[i]}),e}}}]);
+/******/ (function(modules) { // webpackBootstrap
+/******/ 	// The module cache
+/******/ 	var installedModules = {};
+/******/
+/******/ 	// The require function
+/******/ 	function __webpack_require__(moduleId) {
+/******/
+/******/ 		// Check if module is in cache
+/******/ 		if(installedModules[moduleId]) {
+/******/ 			return installedModules[moduleId].exports;
+/******/ 		}
+/******/ 		// Create a new module (and put it into the cache)
+/******/ 		var module = installedModules[moduleId] = {
+/******/ 			i: moduleId,
+/******/ 			l: false,
+/******/ 			exports: {}
+/******/ 		};
+/******/
+/******/ 		// Execute the module function
+/******/ 		modules[moduleId].call(module.exports, module, module.exports, __webpack_require__);
+/******/
+/******/ 		// Flag the module as loaded
+/******/ 		module.l = true;
+/******/
+/******/ 		// Return the exports of the module
+/******/ 		return module.exports;
+/******/ 	}
+/******/
+/******/
+/******/ 	// expose the modules object (__webpack_modules__)
+/******/ 	__webpack_require__.m = modules;
+/******/
+/******/ 	// expose the module cache
+/******/ 	__webpack_require__.c = installedModules;
+/******/
+/******/ 	// define getter function for harmony exports
+/******/ 	__webpack_require__.d = function(exports, name, getter) {
+/******/ 		if(!__webpack_require__.o(exports, name)) {
+/******/ 			Object.defineProperty(exports, name, { enumerable: true, get: getter });
+/******/ 		}
+/******/ 	};
+/******/
+/******/ 	// define __esModule on exports
+/******/ 	__webpack_require__.r = function(exports) {
+/******/ 		if(typeof Symbol !== 'undefined' && Symbol.toStringTag) {
+/******/ 			Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
+/******/ 		}
+/******/ 		Object.defineProperty(exports, '__esModule', { value: true });
+/******/ 	};
+/******/
+/******/ 	// create a fake namespace object
+/******/ 	// mode & 1: value is a module id, require it
+/******/ 	// mode & 2: merge all properties of value into the ns
+/******/ 	// mode & 4: return value when already ns object
+/******/ 	// mode & 8|1: behave like require
+/******/ 	__webpack_require__.t = function(value, mode) {
+/******/ 		if(mode & 1) value = __webpack_require__(value);
+/******/ 		if(mode & 8) return value;
+/******/ 		if((mode & 4) && typeof value === 'object' && value && value.__esModule) return value;
+/******/ 		var ns = Object.create(null);
+/******/ 		__webpack_require__.r(ns);
+/******/ 		Object.defineProperty(ns, 'default', { enumerable: true, value: value });
+/******/ 		if(mode & 2 && typeof value != 'string') for(var key in value) __webpack_require__.d(ns, key, function(key) { return value[key]; }.bind(null, key));
+/******/ 		return ns;
+/******/ 	};
+/******/
+/******/ 	// getDefaultExport function for compatibility with non-harmony modules
+/******/ 	__webpack_require__.n = function(module) {
+/******/ 		var getter = module && module.__esModule ?
+/******/ 			function getDefault() { return module['default']; } :
+/******/ 			function getModuleExports() { return module; };
+/******/ 		__webpack_require__.d(getter, 'a', getter);
+/******/ 		return getter;
+/******/ 	};
+/******/
+/******/ 	// Object.prototype.hasOwnProperty.call
+/******/ 	__webpack_require__.o = function(object, property) { return Object.prototype.hasOwnProperty.call(object, property); };
+/******/
+/******/ 	// __webpack_public_path__
+/******/ 	__webpack_require__.p = "";
+/******/
+/******/
+/******/ 	// Load entry module and return exports
+/******/ 	return __webpack_require__(__webpack_require__.s = 0);
+/******/ })
+/************************************************************************/
+/******/ ([
+/* 0 */
+/***/ (function(module, exports) {
+
+/**
+ * Returns an array of given length, all populated with same value
+ * Convenience function e.g. to initialise arrays of zeroes or nulls
+ * @param {*} length 
+ * @param {*} value 
+ */
+const newArray = function(length, value) {
+  var arr = []
+  for (var l = 0; l < length; l++) {
+    arr.push(value)
+  }
+  return arr
+}
+
+class ModelField {
+  constructor({ vis, queryResponseField }) {
+    this.vis = vis
+    this.name = queryResponseField.name
+    this.view = queryResponseField.view_label || ''
+    this.label = queryResponseField.field_group_variant || queryResponseField.label_short || queryResponseField.label
+    this.is_numeric = typeof queryResponseField.is_numeric !== 'undefined' ? queryResponseField.is_numeric : false
+    this.is_array = ['list', 'number_list', 'location', 'tier'].includes(queryResponseField.type)
+    this.value_format = queryResponseField.value_format ? queryResponseField.value_format : ''
+
+    this.geo_type = ''
+    if (queryResponseField.type === 'location' || queryResponseField.map_layer) {
+      this.geo_type = queryResponseField.type === 'location' ? 'location' : queryResponseField.map_layer.name
+    } 
+
+    this.hide = false
+    if (typeof this.vis.config['hide|' + this.name] !== 'undefined') {
+      if (this.vis.config['hide|' + this.name]) {
+        this.hide = true
+      } 
+    }
+
+    this.style = ''
+    var style_setting = this.vis.config['style|' + this.name]
+    if (typeof style_setting !== 'undefined') {
+      if (style_setting === 'hide') {
+        this.hide = true
+      } else {
+        this.style = style_setting
+      }
+    }
+
+    this.heading = ''
+    this.short_name = ''
+    this.unit = ''
+    if (typeof queryResponseField.tags !== 'undefined') {
+      queryResponseField.tags.forEach(tag => {
+        var tags = tag.split(':')
+        if (tags[0] === 'vis-tools') {
+          switch (tags[1]) {
+            case 'heading':
+              this.heading = tags[2] ; break
+            case 'short_name':
+              this.short_name = tags[2] ; break
+            case 'unit':
+              this.unit = tags[2] ; break
+            case 'style':
+              this.style = tags[2] ; break
+          }
+        }
+      })
+    }
+  }
+}
+
+class ModelDimension extends ModelField {
+  constructor({ vis, queryResponseField }) {
+    super({ vis, queryResponseField })
+
+    this.type = 'dimension'    
+    this.align = 'left'
+  }
+}
+
+class ModelPivot extends ModelField {
+  constructor({ vis, queryResponseField }) {
+    super({ vis, queryResponseField })
+
+    this.type = 'pivot'    
+    this.align = 'center'
+  }
+}
+
+class ModelMeasure extends ModelField {
+  constructor({ vis, queryResponseField, can_pivot }) {
+    super({ vis, queryResponseField })
+
+    this.type = 'measure'
+    this.align = 'right'
+
+    this.is_table_calculation = typeof queryResponseField.is_table_calculation !== 'undefined' ? queryResponseField.is_table_calculation : false
+    this.calculation_type = queryResponseField.type
+    this.is_turtle = typeof queryResponseField.is_turtle !== 'undefined' ? queryResponseField.is_turtle : false
+    this.can_pivot = can_pivot
+  }
+}
+
+class HeaderCell {
+  constructor({ column, type, label = null, align = '', cell_style = [], modelField = { name: '', label: '', view: '' }, pivotData = {} } = { column, type, label, align, cell_style, modelField, pivotData }) {
+    this.id = [column.id, type].join('.')
+    this.column = column
+    this.type = type
+    this.colspan = 1
+    this.rowspan = 1
+    this.headerRow = true
+    this.cell_style = ['headerCell'].concat(cell_style)
+    this.label = label
+
+    this.align = align ? align : this.column.modelField.is_numeric ? 'right' : 'left'
+
+    // if (column.vis.sortColsBy === 'pivots') {
+    //   if (type.startsWith 'pivot') {
+    //     this.align = 'center'
+    //   }
+    // } else {
+
+    // }
+
+    // if (this.column.modelField.type === 'dimension') {
+    //   if (type === 'pivot') {
+    //     this.align = 'right'
+    //   } else if (type === 'heading') {
+    //     this.align = 'center'
+    //   } else {
+    //     this.align = modelField.align || 'left'
+    //   }
+    // } else if (this.column.modelField.type === 'measure') {
+    //   if (type === 'field' && (column.vis.pivot_fields.length === 0 || column.vis.sortColsBy === 'getSortByPivots' )) {
+    //     this.align = modelField.align || 'right'
+    //   } else {
+    //     this.align = 'center'
+    //   }
+    // } else {
+    //   this.align = align
+    // }
+
+    this.modelField = modelField
+    this.pivotData = pivotData
+
+    if (modelField.type) { this.cell_style.push(modelField.type)}
+    if (modelField.is_table_calculation) { this.cell_style.push('calculation')}
+  }
+}
+
+/**
+ * types: dimension | line_item | subtotal | total
+ */
+class Series {
+  constructor({ keys, values, types = [] }) {
+    if (keys.length === values.length ) {
+      this.keys = keys
+      this.values = values
+      this.types = types
+
+      var line_items_only = []
+      var with_subtotals = []
+
+      this.values.forEach((value, i) => {
+        this.types[i] = typeof types[i] !== 'undefined' ? types[i] : 'line_item'
+        if (this.types[i] === 'line_item') {
+          line_items_only.push(value)
+          with_subtotals.push(value)
+        } else if (this.types[i] === 'subtotal') {
+          with_subtotals.push(value)
+        }
+      })
+
+      this.min_for_display = Math.min(...with_subtotals)
+      this.max_for_display = Math.max(...with_subtotals)
+      this.min = Math.min(...line_items_only)
+      this.max = Math.max(...line_items_only)
+      this.sum = line_items_only.reduce((a, b) => a + b, 0)
+      this.count = line_items_only.length
+      this.avg = line_items_only.length > 0 ? this.sum / line_items_only.length : null
+    } else {
+      console.log('Could not construct series, arrays were of different length.')
+    }
+  }
+}
+
+class CellSeries {
+  constructor({ column, row, sort_value, series}) {
+    this.column = column
+    this.row = row
+    this.sort_value = sort_value
+    this.series = new Series(series)
+  }
+
+  toString() {
+    var rendered = ''
+    this.series.keys.forEach((key, i) => {
+      rendered += key + ':'
+      var formatted_value = this.column.modelField.value_format === '' 
+                            ? this.series.values[i].toString() 
+                            : SSF.format(this.column.modelField.value_format, this.series.values[i])
+      rendered += formatted_value + ' '
+    })
+    return rendered
+  }
+}
+
+class ColumnSeries {
+  constructor({ column, is_numeric, series }) {
+    this.column = column
+    this.is_numeric = is_numeric
+    this.series = new Series(series)
+  }
+}
+
+class DataCell {
+  constructor({ value, rendered = null, html = null, links = [], cell_style = [], align = 'right', rowspan = 1, colspan = 1, rowid = '', colid = '' } = {})
+    {
+      this.value = value
+      this.rendered = rendered
+      this.html = html
+      this.links = links
+      this.cell_style = ['rowCell'].concat(cell_style)
+      this.align = align
+      this.rowspan = rowspan
+      this.colspan = colspan
+
+      this.colid = colid
+      this.rowid = rowid
+      this.id = colid && rowid ? [colid, rowid].join('.') : null
+
+      if (this.value === null && this.rendered !== '∞') {
+        this.rendered = '∅'
+      }
+    }
+}
+
+/**
+ * Represents a row in the dataset that populates the vis.
+ * This may be an addtional row (e.g. subtotal) not in the original query
+ * @class
+ */
+class Row {
+  constructor(type = 'line_item') {
+    this.id = ''
+    // this.modelField = null
+    this.hide = false
+    this.type = type  // line_item | subtotal | total
+    this.sort = []    // [ section, subtotal group, row number ]
+    this.data = {}    // Indexed by Column.id
+                      // { value: any, rendered: string, html?: string, links?: array }
+  }
+}
+
+/**
+ * Represents a column in the dataset that populates the vis.
+ * This may be an additional columns (e.g. subtotal, variance) not in the original query
+ * 
+ * Ensures all key vis properties (e.g. 'label') are consistent across different field types
+ * 
+ * @class
+ */
+class Column {
+  constructor(id, vis, modelField) {
+    this.id = id
+    this.vis = vis
+    this.modelField = modelField
+    this.transposed = false
+
+    this.idx = 0
+    this.pos = 0
+    this.levels = []
+    this.pivot_key = '' 
+
+    this.unit = modelField.unit || ''
+    this.hide = modelField.hide || false
+    this.isVariance = false
+    this.variance_type = null
+    this.pivoted = false
+    this.isRowTotal = false
+    this.super = false
+    this.subtotal = false
+    this.subtotal_data = {}
+    
+    this.series = null
+
+    this.sort = []
+    this.colspans = []
+  }
+
+  /**
+   * Returns a header label for a column, to display in table vis
+   * @param {*} level
+   */
+  getHeaderCellLabel (level) {
+    var headerCell = this.levels[level]
+
+    if (headerCell.label !== null) {
+      var label = headerCell.label
+    } else {
+      var label = headerCell.modelField.label
+      var header_setting = this.vis.config['heading|' + headerCell.modelField.name]
+      var label_setting = this.vis.config['label|' + headerCell.modelField.name]
+
+      if (headerCell.type === 'heading') {
+        if (typeof header_setting !== 'undefined') {
+          label = header_setting ? header_setting : headerCell.modelField.heading
+        } else {
+          label = headerCell.modelField.heading
+        }
+        return label
+      }
+
+      if (headerCell.type === 'field') {
+        label = this.vis.useShortName
+          ? headerCell.modelField.short_name || headerCell.modelField.label 
+          : headerCell.modelField.label
+        
+        if (typeof label_setting !== 'undefined' && label_setting !== this.modelField.label) {
+          label = label_setting ? label_setting : label
+        }
+
+        if (this.isVariance) {
+          if (this.vis.groupVarianceColumns) {
+            if (this.vis.pivot_values.length === 2) {
+              label = this.variance_type === 'absolute' ? label + ' #' : label + ' %'
+            } else {
+              label = this.variance_type === 'absolute' ? label + ' Var #' : label + ' Var %'
+            }
+          } else {
+            label = this.variance_type === 'absolute' ? 'Var #' : 'Var %'
+          }
+        }
+    
+        if (typeof this.vis.useViewName !== 'undefined' && this.vis.useViewName) {
+          label = [this.modelField.view, label].join(' ') 
+        }
+      }
+
+      if (headerCell.type === 'pivot') {
+        if (this.isVariance && this.vis.groupVarianceColumns) {
+          if (this.vis.pivot_values.length === 2) {
+            label = 'Variance'
+          } else {
+            label = 'Var ' + label
+          }
+        }
+      }
+    }
+
+    return label
+  }
+
+  getHeaderCellLabelByType (type) {
+    for (var i = 0; i < this.vis.headers.length; i++) {
+      if (type === this.vis.headers[i].type) {
+        return this.getHeaderCellLabel(i)
+      }
+    }
+    return null
+  }
+
+  setHeaderCellLabels () {
+    this.levels.forEach((level, i) => {
+      level.label = level.label === null ? this.getHeaderCellLabel(i) : level.label
+    })
+  }
+
+  getHeaderData () {
+    var headerData = {}
+    this.modelField.vis.headers.forEach((header, i) => {
+      headerData[header.type] = this.levels[i]
+    })
+
+    return headerData
+  }
+}
+
+exports.newArray = newArray
+exports.ModelDimension = ModelDimension
+exports.ModelPivot = ModelPivot
+exports.ModelMeasure = ModelMeasure
+exports.CellSeries = CellSeries
+exports.ColumnSeries = ColumnSeries
+exports.HeaderCell = HeaderCell
+exports.DataCell = DataCell
+exports.Row = Row
+exports.Column = Column
+
+
+/***/ })
+/******/ ]);
 //# sourceMappingURL=vis_primitives.js.map
