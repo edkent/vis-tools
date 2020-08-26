@@ -473,6 +473,24 @@ class VisPluginTableModel {
         order: 100 + i * 10 + 6,
       }
 
+      newOptions['var_num|' + measure.name] = {
+        section: 'Measures',
+        type: 'boolean',
+        label: 'Var #',
+        display_size: 'third',
+        default: true,
+        order: 100 + i * 10 + 7,
+      }
+
+      newOptions['var_pct|' + measure.name] = {
+        section: 'Measures',
+        type: 'boolean',
+        label: 'Var %',
+        display_size: 'third',
+        default: false,
+        order: 100 + i * 10 + 8,
+      }
+
     })
     return newOptions
   }
